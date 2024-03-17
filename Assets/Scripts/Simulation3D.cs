@@ -14,22 +14,26 @@ public class Simulation3D : MonoBehaviour
     ///            ///
     /// VARIABLES  ///
     ///            ///
-    public float gravity;
-    public int particleQuantity;
-    private int particleSpacing;
-    [Range(0.1f, 1.0f)] public float particleSize = 0.1f;  
-    private GameObject[] particleInstances;
-    Vector3[] positions;
-    Vector3[] velocities;
-
+    [Header ("Simulation Settings")]
     public Vector3 boundsSize = new Vector3(10f, 10f, 10f);
     public float collisionDamping = 1.0f;
+    public float gravity;
+    public int particleQuantity;
+    public float particleSpacing = 0.5f;
+
+    [Header("Particle Settings")]
+    [Range(0.1f, 1.0f)] public float particleSize = 0.1f;
+    [Range(0.1f, 1.0f)] public float smoothingRadius = 1.0f;
+    private GameObject[] particleInstances;
+    Vector3[] positions;
+    Vector3[] velocities;    
 
     private void Start() {
         positions = new Vector3[particleQuantity];
         velocities = new Vector3[particleQuantity];
 
-        int particlesPerSide = Mathf.CeilToInt(Mathf.Pow(particleQuantity, 1f / 3f));
+        //round up the particle quantity per side
+        int particlesPerSide = Mathf.RoundToInt(Mathf.Pow(particleQuantity, 1f / 3f));
         float spacing = particleSize * 2 + particleSpacing;
 
         for (int i = 0; i < particleQuantity; i++)
@@ -63,6 +67,28 @@ public class Simulation3D : MonoBehaviour
             }
         }
         
+    }
+    private float SmoothingKernel(float radius, float dst)
+    {
+        float volume = Mathf.PI * Mathf.Pow(radius, 8) / 4;
+        float value = Mathf.Max(0, radius - dst);
+
+        return Mathf.Pow(value, 3) / volume;
+    }
+
+    private float CalculateDensity(Vector3 thisParticle)
+    {
+        float density = 0;
+        const float mass = 1;
+
+        foreach (Vector3 position in positions)
+        {
+            float dst = (position - thisParticle).magnitude;
+            float influence = SmoothingKernel(smoothingRadius, dst);
+            density += mass * influence;
+        }
+
+        return density;
     }
 
     private void ResolveCollisions(ref Vector3 position, ref Vector3 velocity)

@@ -261,11 +261,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   particleSphere: {fileID: 6582425073304462636, guid: 35ab9acd23ec15a4ebc1b8ead44edd5d,
     type: 3}
+  boundsSize: {x: 10, y: 10, z: 10}
+  collisionDamping: 0.8
   gravity: 9.81
   particleQuantity: 1000
+  particleSpacing: 0.5
   particleSize: 0.1
-  boundsSize: {x: 10, y: 10, z: 10}
-  collisionDamping: 0.2
+  smoothingRadius: 1
 --- !u!1 &504727918
 GameObject:
   m_ObjectHideFlags: 0
