@@ -264,9 +264,11 @@ MonoBehaviour:
   boundsSize: {x: 10, y: 10, z: 10}
   seed: 1352
   collisionDamping: 0.2
-  gravity: 9.81
-  particleQuantity: 1000
-  particleSpacing: 0.5
+  gravity: 0
+  targetDensity: 0
+  pressureMultiplier: 0
+  particleQuantity: 5000
+  particleSpacing: 0.2
   particleSize: 0.1
   smoothingRadius: 1
   mass: 1

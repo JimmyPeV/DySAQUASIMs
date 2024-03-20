@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Unity.Mathematics;
 using Unity.VisualScripting;
 using UnityEngine;
@@ -16,19 +17,25 @@ public class Simulation3D : MonoBehaviour
     ///            ///
     [Header ("Simulation Settings")]
     public Vector3 boundsSize = new Vector3(10f, 10f, 10f);
+    //public Vector3 boundsRotation;
     public int seed = 0;
     public float collisionDamping = 1.0f;
     public float gravity;
-    public int particleQuantity;
-    public float particleSpacing = 0.5f;
+    public float targetDensity;
+    public float pressureMultiplier;
+    
 
     [Header("Particle Settings")]
+    public int particleQuantity;
+    public float particleSpacing = 0.5f;
     [Range(0.1f, 1.0f)] public float particleSize = 0.1f;
     [Range(0.1f, 1.0f)] public float smoothingRadius = 1.0f;
     public float mass = 1.0f;
     private GameObject[] particleInstances;
     Vector3[] positions;
-    Vector3[] velocities;    
+    Vector3[] velocities;
+
+    private float[] densities;
 
     private void Start() {
         positions = new Vector3[particleQuantity];
@@ -58,7 +65,7 @@ public class Simulation3D : MonoBehaviour
         for (int i = 0; i < particleQuantity; i++)
         {
             float dst = (positions[i] - samplePosition).magnitude;
-            float influence = SmoothingKernel(dst, smoothingRadius);
+            float influence = SmoothingKernel(smoothingRadius, dst);
             float density = CalculateDensity(positions[i]);
             property += particleInstances[i] * mass / density * influence;
         }
@@ -66,23 +73,37 @@ public class Simulation3D : MonoBehaviour
         return property;
     }*/
 
-    /*private Vector3 CalculatePropertyGradient(Vector3 samplePosition)
+    private Vector3 CalculatePropertyGradient(Vector3 samplePosition)
     {
-        const float stepSize = 0.001f;
-        float deltaX = CalculatePropery(samplePosition + Vector3.right * stepSize) - CalculateProperty(samplePosition);
-        float deltaY = CalculatePropery(samplePosition + Vector3.up * stepSize) - CalculateProperty(samplePosition);
-        float deltaZ = CalculatePropery(samplePosition + Vector3.forward * stepSize) - CalculateProperty(samplePosition);
-    
-        Vector3 gradient = new Vector3(deltaX, deltaY, deltaZ) / stepSize;
-        return gradient;
-    }*/
+        Vector3 propertyGradient = Vector3.zero;
 
-    private float SmoothingKernel(float radius, float dst)
+        for (int i = 0; i < particleQuantity; i++)
+        {
+            float dst = (positions[i] - samplePosition).magnitude;
+            Vector3 dir = (positions[i] - samplePosition) / dst;
+            float slope = SmoothingKernelDerivative(smoothingRadius, dst);
+            float density = densities[i];
+            //propertyGradient += -particleInstances[i] * dir * slope * mass / density;
+        }
+
+        return propertyGradient;
+    }
+
+    static float SmoothingKernel(float radius, float dst)
     {
         float volume = Mathf.PI * Mathf.Pow(radius, 8) / 4;
         float value = Mathf.Max(0, radius - dst);
 
         return Mathf.Pow(value, 3) / volume;
+    }
+
+    static float SmoothingKernelDerivative(float radius, float dst)
+    {
+        if(dst >= radius) return 0;
+        float f = Mathf.Pow(radius, 2) - Mathf.Pow(dst, 2);
+        float scale = -24 / (Mathf.PI * Mathf.Pow(radius, 8));
+
+        return scale * dst * f * f;
     }
 
     private float CalculateDensity(Vector3 thisParticle)
@@ -98,6 +119,22 @@ public class Simulation3D : MonoBehaviour
         }
 
         return density;
+    }
+
+    void UpdateDensities()
+    {
+        Parallel.For(0, particleQuantity, i =>
+        {
+            densities[i] = CalculateDensity(positions[i]);
+        });
+    }
+
+    float ConvertDensityToPressure(float density) //this is more for gas beahviours but it will do 4 now
+    {
+        float densityError = density - targetDensity;
+        float pressure = densityError * pressureMultiplier;
+
+        return pressure;
     }
 
     private void ResolveCollisions(ref Vector3 position, ref Vector3 velocity)
