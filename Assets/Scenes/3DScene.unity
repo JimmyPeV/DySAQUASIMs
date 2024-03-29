@@ -182,10 +182,10 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 60
+  field of view: 40
   orthographic: 0
   orthographic size: 5
-  m_Depth: -1
+  m_Depth: 1
   m_CullingMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -209,7 +209,7 @@ Transform:
   m_GameObject: {fileID: 273646657}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: -10}
+  m_LocalPosition: {x: 0, y: 1, z: -100}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -262,16 +262,19 @@ MonoBehaviour:
   particleSphere: {fileID: 6582425073304462636, guid: 35ab9acd23ec15a4ebc1b8ead44edd5d,
     type: 3}
   boundsSize: {x: 10, y: 10, z: 10}
-  seed: 1352
-  collisionDamping: 0.2
-  gravity: 0
-  targetDensity: 0
-  pressureMultiplier: 0
-  particleQuantity: 5000
+  collisionDamping: 0.95
+  gravity: 9
+  targetDensity: 0.5
+  pressureMultiplier: 0.5
+  particleQuantity: 200
   particleSpacing: 0.2
-  particleSize: 0.1
-  smoothingRadius: 1
+  particleSize: 1
+  smoothingRadius: 2
   mass: 1
+  particleInstances: []
+  positions: []
+  velocities: []
+  densities: []
 --- !u!1 &504727918
 GameObject:
   m_ObjectHideFlags: 0

@@ -18,10 +18,10 @@ public class Simulation3D : MonoBehaviour
     [Header ("Simulation Settings")]
     public Vector3 boundsSize = new Vector3(10f, 10f, 10f);
     //public Vector3 boundsRotation;
-    public int seed = 0;
+    private int seed = 1352;
     public float collisionDamping = 1.0f;
     public float gravity;
-    public float targetDensity;
+    [Range(0.1f, 2.75f)] public float targetDensity;
     public float pressureMultiplier;
     
 
@@ -29,17 +29,21 @@ public class Simulation3D : MonoBehaviour
     public int particleQuantity;
     public float particleSpacing = 0.5f;
     [Range(0.1f, 1.0f)] public float particleSize = 0.1f;
-    [Range(0.1f, 1.0f)] public float smoothingRadius = 1.0f;
-    public float mass = 1.0f;
-    private GameObject[] particleInstances;
-    Vector3[] positions;
-    Vector3[] velocities;
+    public float smoothingRadius = 1.0f;
+    [Range(0.1f, 1.0f)] public float mass = 1.0f;
+    
 
-    private float[] densities;
+    [Header("Particles Instances - Positions - Velocities - Densities")]
+    public GameObject[] particleInstances;
+    public Vector3[] positions;
+    public Vector3[] velocities;
+    public float[] densities;
+
 
     private void Start() {
         positions = new Vector3[particleQuantity];
         velocities = new Vector3[particleQuantity];
+        densities = new float[particleQuantity];
 
         particleInstances = new GameObject[particleQuantity];
         //CreateParticlesInCube();
@@ -47,15 +51,39 @@ public class Simulation3D : MonoBehaviour
     }
 
     private void Update() {
-        for(int i = 0; i < positions.Length; i++){
-            velocities[i] += Vector3.down * gravity * Time.deltaTime;
-            positions[i] += velocities[i] * Time.deltaTime;
-            ResolveCollisions(ref positions[i], ref velocities[i]);
-
-            if (particleInstances[i] != null) {
-                particleInstances[i].transform.position = positions[i];
-            }
+        SimulationStep(Time.deltaTime);
+        for (int i = 0; i < particleQuantity; i++)
+        {
+            particleInstances[i].transform.position = positions[i];
         }
+    }
+
+    void SimulationStep(float deltaTime)
+    {
+        //Densities & Collisions
+        Parallel.For(0, particleQuantity, i =>
+        {
+            velocities[i] +=  Vector3.down * gravity * deltaTime;
+            densities[i] = CalculateDensity(positions[i]);
+        });
+
+        //Aplly pressure forces
+        Parallel.For(0, particleQuantity, i =>
+        {
+            Vector3 pressureForce = CalculatePressureForce(i);
+            Vector3 pressureAcceleration = pressureForce / densities[i];
+            // F = m * a
+            // a = F / m
+            velocities[i] = pressureAcceleration * deltaTime;
+        });
+
+
+        //Update positions
+        Parallel.For(0, particleQuantity, i =>
+        {
+            positions[i] += velocities[i] * deltaTime;
+            ResolveCollisions(ref positions[i], ref velocities[i]);
+        });
     }
 
     /*private float CalculateProperty(Vector3 samplePosition)
@@ -73,37 +101,53 @@ public class Simulation3D : MonoBehaviour
         return property;
     }*/
 
-    private Vector3 CalculatePropertyGradient(Vector3 samplePosition)
+    private Vector3 CalculatePressureForce(int particleIndex)
     {
-        Vector3 propertyGradient = Vector3.zero;
+        Vector3 pressureForce = Vector3.zero;
 
         for (int i = 0; i < particleQuantity; i++)
         {
-            float dst = (positions[i] - samplePosition).magnitude;
-            Vector3 dir = (positions[i] - samplePosition) / dst;
+            if(particleIndex == i)
+            {
+                continue;
+            }
+            Vector3 offset = positions[i] - positions[particleIndex];
+            float dst = offset.magnitude;
+            Vector3 dir = dst == 0 ? GetRandomDir() : offset / dst;
+
             float slope = SmoothingKernelDerivative(smoothingRadius, dst);
             float density = densities[i];
-            //propertyGradient += -particleInstances[i] * dir * slope * mass / density;
+            float sharedPressure = CalculateSharedPressure(density, densities[particleIndex]);
+            pressureForce += sharedPressure * dir * slope * mass / density;
         }
+        
+        return pressureForce;
+    }
 
-        return propertyGradient;
+    private float CalculateSharedPressure(float densityA, float densityB)
+    {
+        float pressureA = ConvertDensityToPressure(densityA);
+        float pressureB = ConvertDensityToPressure(densityB);
+
+        return (pressureA + pressureB) / 2;
     }
 
     static float SmoothingKernel(float radius, float dst)
     {
-        float volume = Mathf.PI * Mathf.Pow(radius, 8) / 4;
-        float value = Mathf.Max(0, radius - dst);
+        if(dst >= radius) return 0;
 
-        return Mathf.Pow(value, 3) / volume;
+        float volume = (Mathf.PI * Mathf.Pow(radius, 4)) / 6;
+
+        return Mathf.Pow(radius - dst, 2) / volume;
     }
 
     static float SmoothingKernelDerivative(float radius, float dst)
     {
         if(dst >= radius) return 0;
-        float f = Mathf.Pow(radius, 2) - Mathf.Pow(dst, 2);
-        float scale = -24 / (Mathf.PI * Mathf.Pow(radius, 8));
 
-        return scale * dst * f * f;
+        float scale = 12 / (Mathf.Pow(radius, 4) * Mathf.PI);
+
+        return (dst - radius) * scale;
     }
 
     private float CalculateDensity(Vector3 thisParticle)
@@ -129,7 +173,7 @@ public class Simulation3D : MonoBehaviour
         });
     }
 
-    float ConvertDensityToPressure(float density) //this is more for gas beahviours but it will do 4 now
+    float ConvertDensityToPressure(float density) //this is more for gas beahviours but it will do for now
     {
         float densityError = density - targetDensity;
         float pressure = densityError * pressureMultiplier;
@@ -183,6 +227,8 @@ public class Simulation3D : MonoBehaviour
         Unity.Mathematics.Random rng = new Unity.Mathematics.Random((uint)seed);
         particleInstances = new GameObject[particleQuantity];
 
+        GameObject gameManager = GameObject.Find("GameManager");
+
         for (int i = 0; i < particleQuantity; i++)
         {
             float x = rng.NextFloat(-boundsSize.x / 2, boundsSize.x / 2);
@@ -191,9 +237,22 @@ public class Simulation3D : MonoBehaviour
 
             positions[i] = new Vector3(x, y, z);
 
-            particleInstances[i] = Instantiate(particleSphere, positions[i], Quaternion.identity);
+            particleInstances[i] = Instantiate(particleSphere, positions[i], Quaternion.identity, gameManager.transform);
         }
     }
+
+    private Vector3 GetRandomDir()
+    {
+        float azimuth = UnityEngine.Random.Range(0f, 2f * Mathf.PI);
+        float polar = UnityEngine.Random.Range(0f, Mathf.PI);
+
+        float x = Mathf.Sin(polar) * Mathf.Cos(azimuth);
+        float y = Mathf.Sin(polar) * Mathf.Sin(azimuth);
+        float z = Mathf.Cos(polar);
+
+        return new Vector3(x, y, z);
+    }
+
 
     private void OnDrawGizmos()
     {
