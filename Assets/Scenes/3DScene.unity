@@ -265,11 +265,11 @@ MonoBehaviour:
   collisionDamping: 0.95
   gravity: 9
   targetDensity: 0.5
-  pressureMultiplier: 0.5
-  particleQuantity: 200
+  pressureMultiplier: 100
+  particleQuantity: 1000
   particleSpacing: 0.2
   particleSize: 1
-  smoothingRadius: 2
+  smoothingRadius: 1
   mass: 1
   particleInstances: []
   positions: []

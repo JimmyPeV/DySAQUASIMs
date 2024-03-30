@@ -21,7 +21,7 @@ public class Simulation3D : MonoBehaviour
     private int seed = 1352;
     public float collisionDamping = 1.0f;
     public float gravity;
-    [Range(0.1f, 2.75f)] public float targetDensity;
+    [Range(0.1f, 1.0f)] public float targetDensity;
     public float pressureMultiplier;
     
 
@@ -104,6 +104,8 @@ public class Simulation3D : MonoBehaviour
     private Vector3 CalculatePressureForce(int particleIndex)
     {
         Vector3 pressureForce = Vector3.zero;
+        int threadSafeSeed = seed + particleIndex;
+        Unity.Mathematics.Random rng = new Unity.Mathematics.Random((uint)threadSafeSeed);
 
         for (int i = 0; i < particleQuantity; i++)
         {
@@ -113,7 +115,7 @@ public class Simulation3D : MonoBehaviour
             }
             Vector3 offset = positions[i] - positions[particleIndex];
             float dst = offset.magnitude;
-            Vector3 dir = dst == 0 ? GetRandomDir() : offset / dst;
+            Vector3 dir = dst == 0 ? GetRandomDir(rng) : offset / dst;
 
             float slope = SmoothingKernelDerivative(smoothingRadius, dst);
             float density = densities[i];
@@ -241,10 +243,10 @@ public class Simulation3D : MonoBehaviour
         }
     }
 
-    private Vector3 GetRandomDir()
+    private Vector3 GetRandomDir(Unity.Mathematics.Random rng)
     {
-        float azimuth = UnityEngine.Random.Range(0f, 2f * Mathf.PI);
-        float polar = UnityEngine.Random.Range(0f, Mathf.PI);
+        float azimuth = rng.NextFloat(0f, 2f * Mathf.PI);
+        float polar = rng.NextFloat(0f, Mathf.PI);
 
         float x = Mathf.Sin(polar) * Mathf.Cos(azimuth);
         float y = Mathf.Sin(polar) * Mathf.Sin(azimuth);
