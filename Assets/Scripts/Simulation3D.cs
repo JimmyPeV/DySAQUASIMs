@@ -8,15 +8,23 @@ using UnityEngine;
 
 public class Simulation3D : MonoBehaviour
 {
-    ///            ///
-    /// PREFABs    ///
-    ///            ///
+    //////////////////////////////////////
+    /////////////            /////////////
+    /////////////   PREFABs  /////////////
+    /////////////            /////////////
+    //////////////////////////////////////
+    
     [SerializeField] private GameObject particleSphere;
-    ///            ///
-    /// VARIABLES  ///
-    ///            ///
+
+    ////////////////////////////////////////
+    /////////////              /////////////
+    /////////////   VARIABLES  /////////////
+    /////////////              /////////////
+    ////////////////////////////////////////
+    
     [Header ("Simulation Settings")]
     public Vector3 boundsSize = new Vector3(10f, 10f, 10f);
+    [SerializeField] public Gradient velocityGradient;
     //public Vector3 boundsRotation;
     private int seed = 1352;
     public float collisionDamping = 1.0f;
@@ -27,6 +35,7 @@ public class Simulation3D : MonoBehaviour
 
     [Header("Particle Settings")]
     public int particleQuantity;
+
     public float particleSpacing = 0.5f;
     [Range(0.1f, 1.0f)] public float particleSize = 0.1f;
     public float smoothingRadius = 1.0f;
@@ -34,12 +43,19 @@ public class Simulation3D : MonoBehaviour
     
 
     [Header("Particles Instances - Positions - Velocities - Densities")]
-    public GameObject[] particleInstances;
+    private GameObject[] particleInstances;
     public Vector3[] positions;
     public Vector3[] velocities;
     public float[] densities;
+    private float maxObservedVelocity = 0f;
 
 
+    ////////////////////////////////////////////////////
+    /////////////                          /////////////
+    /////////////   SIMULATION START/STEP  /////////////
+    /////////////                          /////////////
+    ////////////////////////////////////////////////////
+    
     private void Start() {
         positions = new Vector3[particleQuantity];
         velocities = new Vector3[particleQuantity];
@@ -55,11 +71,17 @@ public class Simulation3D : MonoBehaviour
         for (int i = 0; i < particleQuantity; i++)
         {
             particleInstances[i].transform.position = positions[i];
+            maxObservedVelocity = Mathf.Max(maxObservedVelocity, velocities[i].magnitude);
+
+            float velocityFraction = velocities[i].magnitude / maxObservedVelocity;
+            Color color = velocityGradient.Evaluate(velocityFraction);
+            particleInstances[i].GetComponent<Renderer>().material.color = color;
         }
     }
 
     void SimulationStep(float deltaTime)
     {
+
         //Densities & Collisions
         Parallel.For(0, particleQuantity, i =>
         {
@@ -75,8 +97,7 @@ public class Simulation3D : MonoBehaviour
             // F = m * a
             // a = F / m
             velocities[i] = pressureAcceleration * deltaTime;
-        });
-
+        });       
 
         //Update positions
         Parallel.For(0, particleQuantity, i =>
@@ -86,21 +107,12 @@ public class Simulation3D : MonoBehaviour
         });
     }
 
-    /*private float CalculateProperty(Vector3 samplePosition)
-    {
-        float property = 0;
-
-        for (int i = 0; i < particleQuantity; i++)
-        {
-            float dst = (positions[i] - samplePosition).magnitude;
-            float influence = SmoothingKernel(smoothingRadius, dst);
-            float density = CalculateDensity(positions[i]);
-            property += particleInstances[i] * mass / density * influence;
-        }
-
-        return property;
-    }*/
-
+    ///////////////////////////////////////////////////
+    /////////////                         /////////////
+    /////////////   PRESSURE & DENSITIES  /////////////
+    /////////////                         /////////////
+    ///////////////////////////////////////////////////
+    
     private Vector3 CalculatePressureForce(int particleIndex)
     {
         Vector3 pressureForce = Vector3.zero;
@@ -202,6 +214,12 @@ public class Simulation3D : MonoBehaviour
         }
     }
 
+    //////////////////////////////////////////
+    /////////////                /////////////
+    /////////////   AUX SYSTEMs  /////////////
+    /////////////                /////////////
+    //////////////////////////////////////////
+    
     private void CreateParticlesInCube()
     {
         int particlesPerSide = Mathf.CeilToInt(Mathf.Pow(particleQuantity, 1f / 3f));
