@@ -259,9 +259,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d642a9859edd6704bba192f4f2d469a5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particleSphere: {fileID: 6582425073304462636, guid: 35ab9acd23ec15a4ebc1b8ead44edd5d,
+  particleSphere: {fileID: 6582425073304462636, guid: f974f5c56f446994387f8249336530e1,
     type: 3}
-  boundsSize: {x: 5, y: 10, z: 5}
+  boundsSize: {x: 20, y: 20, z: 20}
   velocityGradient:
     serializedVersion: 2
     key0: {r: 0, g: 1, b: 1, a: 1}
@@ -293,13 +293,13 @@ MonoBehaviour:
     m_NumColorKeys: 2
     m_NumAlphaKeys: 2
   collisionDamping: 0.95
-  gravity: 0
+  gravity: 9
   targetDensity: 0.8
-  pressureMultiplier: 100
-  particleQuantity: 500
+  pressureMultiplier: 0.5
+  particleQuantity: 1000
   particleSpacing: 0.2
-  particleSize: 1
-  smoothingRadius: 0.5
+  particleSize: 0.1
+  smoothingRadius: 0.7
   mass: 1
   positions: []
   velocities: []

@@ -29,7 +29,7 @@ public class Simulation3D : MonoBehaviour
     private int seed = 1352;
     public float collisionDamping = 1.0f;
     public float gravity;
-    [Range(0.1f, 1.0f)] public float targetDensity;
+    [Range(0.1f, 5.0f)] public float targetDensity;
     public float pressureMultiplier;
     
 
@@ -68,12 +68,17 @@ public class Simulation3D : MonoBehaviour
 
     private void Update() {
         SimulationStep(Time.deltaTime);
-        for (int i = 0; i < particleQuantity; i++)
-        {
+    
+        for (int i = 0; i < particleQuantity; i++) {
             particleInstances[i].transform.position = positions[i];
             maxObservedVelocity = Mathf.Max(maxObservedVelocity, velocities[i].magnitude);
+        }
+        
+        // Asegúrate de que maxObservedVelocity no sea 0 para evitar dividir por 0
+        float safeMaxVelocity = Mathf.Max(maxObservedVelocity, 0.0001f);
 
-            float velocityFraction = velocities[i].magnitude / maxObservedVelocity;
+        for (int i = 0; i < particleQuantity; i++) {
+            float velocityFraction = velocities[i].magnitude / safeMaxVelocity;
             Color color = velocityGradient.Evaluate(velocityFraction);
             particleInstances[i].GetComponent<Renderer>().material.color = color;
         }
