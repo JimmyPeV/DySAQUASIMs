@@ -2,21 +2,22 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Threading.Tasks;
 using Unity.Mathematics;
-using Unity.VisualScripting;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 public class Simulation3D : MonoBehaviour
 {
-    //////////////////////////////////////
-    /////////////            /////////////
-    /////////////   PREFABs  /////////////
-    /////////////            /////////////
-    //////////////////////////////////////
+    #region Variables
+    ///////////////////////////////////////////////
+    /////////////                     /////////////
+    /////////////   Particle drawing  /////////////
+    /////////////                     /////////////
+    ///////////////////////////////////////////////
     
-    [SerializeField] private GameObject particleSphere;
+    private static int segments = 100;
+    private Material particleMat;
 
     ////////////////////////////////////////
     /////////////              /////////////
@@ -35,7 +36,6 @@ public class Simulation3D : MonoBehaviour
 
     [Header("Particle Settings")]
     public int particleQuantity;
-
     public float particleSpacing = 0.5f;
     [Range(0.1f, 1.0f)] public float particleSize = 0.1f;
     public float smoothingRadius = 1.0f;
@@ -44,19 +44,22 @@ public class Simulation3D : MonoBehaviour
 
     [Header("Particles Instances - Positions - Velocities - Densities")]
     private GameObject[] particleInstances;
+    private List<GameObject> particleList;
     private Vector3[] positions;
+    private Vector3[] predictedPosition;
     private Vector3[] velocities;
     private float[] densities;
 
-    ////////////////////////////////////////
-    /////////////              /////////////
-    /////////////   CELL KEYS  /////////////
-    /////////////              /////////////
-    ////////////////////////////////////////
+    /////////////////////////////////////////////////////
+    /////////////                           /////////////
+    /////////////   Spatial grid structure  /////////////
+    /////////////                           /////////////
+    /////////////////////////////////////////////////////
     private Entry[] spatialLookup;
     private int[] startIndices;
     private Vector3[] cellOffsets;
 
+    #endregion
 
     #region Simulation Start-Step
 
@@ -71,26 +74,31 @@ public class Simulation3D : MonoBehaviour
         velocities = new Vector3[particleQuantity];
         densities = new float[particleQuantity];
 
-        particleInstances = new GameObject[particleQuantity];
-        CreateParticlesInCube();
+        GenerateParticles(particleQuantity);
+        //CreateParticlesInCube();
         //CreateParticlesAtRandom(seed);
     }
 
     private void Update() {
         SimulationStep(Time.deltaTime);
-    
-        for (int i = 0; i < particleQuantity; i++) {
-            particleInstances[i].transform.position = positions[i];
-        }
     }
 
     void SimulationStep(float deltaTime)
     {
-        //Densities & Collisions
+        // Apply gravity and predict next position
         Parallel.For(0, particleQuantity, i =>
         {
             velocities[i] +=  Vector3.down * gravity * deltaTime;
-            densities[i] = CalculateDensity(positions[i]);
+            predictedPosition[i] = positions[i] + velocities[i] * 1 / 120; //Change 120 for the smoothness
+        });
+
+        //Update spatial lookup with predicted position
+        UpdateSpatialLookup(predictedPosition, smoothingRadius);
+
+        //Calculate densities
+        Parallel.For(0, particleQuantity, i =>
+        {
+            densities[i] = CalculateDensity(predictedPosition[i]);
         });
 
         //Aplly pressure forces
@@ -100,7 +108,7 @@ public class Simulation3D : MonoBehaviour
             Vector3 pressureAcceleration = pressureForce / densities[i];
             // F = m * a
             // a = F / m
-            velocities[i] = pressureAcceleration * deltaTime;
+            velocities[i] += pressureAcceleration * deltaTime;
         });       
 
         //Update positions
@@ -157,6 +165,7 @@ public class Simulation3D : MonoBehaviour
         */
     #endregion
 
+    #region Spatial 3D Structure
     void InitializeSpatialStructure(){
         spatialLookup = new Entry[particleQuantity];
         startIndices = new int[particleQuantity];
@@ -202,7 +211,8 @@ public class Simulation3D : MonoBehaviour
             new Vector3(-1, -1, -1), //Bottom Left cell
         };
     }
-    public void UpdateSpatial(Vector3[] points, float radius){
+
+    public void UpdateSpatialLookup(Vector3[] points, float radius){
         this.positions = points;
         this.smoothingRadius = radius;
 
@@ -220,8 +230,8 @@ public class Simulation3D : MonoBehaviour
 
         //Calculate start indices of each unique cell key in the spatial lookup
         Parallel.For(0, points.Length, i=>{
-            uint key = spatialLookup[i].cellKey;
-            uint keyPrev = i == 0 ? uint.MaxValue : spatialLookup[i - 1].cellKey;
+            uint key = spatialLookup[i].hashKey;
+            uint keyPrev = i == 0 ? uint.MaxValue : spatialLookup[i - 1].hashKey;
             if(key != keyPrev){
                 startIndices[key] = i;
             }
@@ -277,9 +287,9 @@ public class Simulation3D : MonoBehaviour
             for (int i = cellStartIndex; i < spatialLookup.Length; i++)
             {
                 //Exit loop if we're no longer looking at the correct cell
-                if(spatialLookup[i].cellKey != key) break;
+                if(spatialLookup[i].hashKey != key) break;
 
-                int particleIndex = spatialLookup[i].particleIndex;
+                int particleIndex = spatialLookup[i].index;
 
                 float sqrDst = (particleInstances[particleIndex].transform.position - samplePoint).sqrMagnitude;
 
@@ -292,6 +302,8 @@ public class Simulation3D : MonoBehaviour
         }
         return validPointsInsideRadius;
     }
+
+    #endregion
 
     #region Pressure & Densities
     ///////////////////////////////////////////////////
@@ -412,61 +424,99 @@ public class Simulation3D : MonoBehaviour
     /////////////                /////////////
     //////////////////////////////////////////
     
-    struct Entry : IComparable<Entry>
+    public class Entry : IComparable
     {
-        public int particleIndex;
-        public uint cellKey;
+        public int index;                   // the index in the points array
+        public uint hashKey;                // the hashkey of the given points
 
-        public Entry(int particleIndex, uint cellKey)
+        public Entry(int _index, uint _hashKey)
         {
-            this.particleIndex = particleIndex;
-            this.cellKey = cellKey;
+            this.index = _index;
+            this.hashKey = _hashKey;
         }
 
-        public int CompareTo(Entry other)
+        public int CompareTo(object obj)
         {
-            return cellKey.CompareTo(other.cellKey);
+            Entry entry = obj as Entry;
+            return this.hashKey.CompareTo(entry.hashKey);
         }
     }
 
-    private void CreateParticlesInCube()
+    float3[] GenerateParticles(int numParticles){
+        float3 s = new float3(10, 10, 10);
+
+        int numX = Mathf.CeilToInt(Mathf.Pow(numParticles * (s.x / s.y / s.z), 1.0f / 3.0f));
+        int numY = Mathf.CeilToInt(Mathf.Pow(numParticles * (s.y / s.x / s.z), 1.0f / 3.0f));
+        int numZ = Mathf.CeilToInt(numParticles / (float)(numX * numY));
+        int i = 0;
+
+        float3[] particles = new float3[particleQuantity];
+
+        for (int z = 0; z < numZ; z++)
+        {
+            for (int y = 0; y < numY; y++)
+            {
+                for (int x = 0; x < numX; x++)
+                {
+                    if(i >= particleQuantity) break;
+
+                    float tx = numX <= 1 ? 0.5f : x / (numX - 1f);
+                    float ty = numY <= 1 ? 0.5f : y / (numY - 1f);
+                    float tz = numZ <= 1 ? 0.5f : z / (numZ - 1f);
+
+                    particles[i] = new float3((tx - 0.5f) * s.x, (ty - 0.5f) * s.y, (tz - 0.5f) * s.z);
+
+                    i++;
+                }
+            }
+        }
+        return particles;
+    }
+
+    void UniformCreateParticles()
     {
-        int particlesPerSide = Mathf.CeilToInt(Mathf.Pow(particleQuantity, 1f / 3f));
-        float spacing = particleSize * 2 + particleSpacing;
+        // Create particle arrays
+        positions = new Vector3[particleQuantity];
+        predictedPosition = new Vector3[particleQuantity];
+        velocities = new Vector3[particleQuantity];
+
+        // Calculate how many particles to place per dimension
+        int particlesPerSide = Mathf.CeilToInt(Mathf.Pow(particleQuantity, 1f / 3f)); // Cube root to distribute particles evenly
+        float spacing = particleSize * 2;
 
         for (int i = 0; i < particleQuantity; i++)
         {
-            int z = i / (particlesPerSide * particlesPerSide);
-            int idx = i % (particlesPerSide * particlesPerSide);
-            int y = idx / particlesPerSide;
-            int x = idx % particlesPerSide;
+            int z = i / (particlesPerSide * particlesPerSide); // Calculate the depth layer index
+            int indexXY = i % (particlesPerSide * particlesPerSide); // Calculate index for the x-y plane
+            int y = indexXY / particlesPerSide; // Calculate row index within the layer
+            int x = indexXY % particlesPerSide; // Calculate column index within the row
 
+            // Compute the positions offset from the center
             float posX = (x - particlesPerSide / 2f + 0.5f) * spacing;
             float posY = (y - particlesPerSide / 2f + 0.5f) * spacing;
             float posZ = (z - particlesPerSide / 2f + 0.5f) * spacing;
 
+            // Assign positions and predicted positions
             positions[i] = new Vector3(posX, posY, posZ);
-
-            particleInstances[i] = Instantiate(particleSphere, positions[i], Quaternion.identity);
+            predictedPosition[i] = new Vector3(posX, posY, posZ);
         }
     }
 
-    private void CreateParticlesAtRandom(int seed)
+    void RandomCreateParticles(int seed)
     {
-        Unity.Mathematics.Random rng = new Unity.Mathematics.Random((uint)seed);
-        particleInstances = new GameObject[particleQuantity];
+        System.Random rng = new(seed);
+        positions = new Vector3[particleQuantity];
+        predictedPosition = new Vector3[particleQuantity];
+        velocities = new Vector3[particleQuantity];
 
-        GameObject gameManager = GameObject.Find("GameManager");
-
-        for (int i = 0; i < particleQuantity; i++)
+        for (int i = 0; i < positions.Length; i++)
         {
-            float x = rng.NextFloat(-boundsSize.x / 2, boundsSize.x / 2);
-            float y = rng.NextFloat(-boundsSize.y / 2, boundsSize.y / 2);
-            float z = rng.NextFloat(-boundsSize.z / 2, boundsSize.z / 2);
+            float x = (float)(rng.NextDouble() - 0.5) * boundsSize.x;
+            float y = (float)(rng.NextDouble() - 0.5) * boundsSize.y;
+            float z = (float)(rng.NextDouble() - 0.5) * boundsSize.z;
 
             positions[i] = new Vector3(x, y, z);
-
-            particleInstances[i] = Instantiate(particleSphere, positions[i], Quaternion.identity, gameManager.transform);
+            predictedPosition[i] = new Vector3(x, y, z);
         }
     }
 
@@ -487,6 +537,82 @@ public class Simulation3D : MonoBehaviour
     {
         Gizmos.color = UnityEngine.Color.yellow;
         Gizmos.DrawWireCube(transform.position, boundsSize);
+    }
+
+    void DrawParticles(){
+        //Delete previous particles
+        if(particleList.Count != 0){
+            foreach(GameObject particle in particleList){
+                Destroy(particle);
+            }
+        }
+        for (int i = 0; i < particleQuantity; i++)
+        {
+            DrawCircle(positions[i], particleSize, UnityEngine.Color.blue);
+        }
+        foreach (Transform trnsfrm in transform)
+        {
+            particleList.Add(trnsfrm.gameObject);
+        }
+    }
+
+    //Grab this circle gizmo draw for rendering and optimization pruposes, 
+    // since the original sphere made by unity its very heavy on graphical terms.
+    void DrawCircle(Vector2 position, float radius, UnityEngine.Color color){
+        Vector3[] vertices = new Vector3[segments + 1];
+        Vector2[] uvs = new Vector2[vertices.Length];
+        int[] triangles = new int[segments * 3];
+
+        vertices[0] = new Vector3(position.x, position.y, 0);  // center vertex
+        uvs[0] = new Vector2(0.5f, 0.5f);
+
+        for (int i = 1, t = 0; i < vertices.Length; i++, t += 3)
+        {
+            float angle = (float)(i - 1) / segments * 360 * Mathf.Deg2Rad;
+            float x = Mathf.Sin(angle) * radius + position.x;
+            float y = Mathf.Cos(angle) * radius + position.y;
+
+            vertices[i] = new Vector3(x, y, 0);
+            uvs[i] = new Vector2((x / radius + 1) * 0.5f, (y / radius + 1) * 0.5f);
+
+            if (i < vertices.Length - 1)
+            {
+                triangles[t] = 0;
+                triangles[t + 1] = i;
+                triangles[t + 2] = i + 1;
+            }
+            else
+            {
+                triangles[t] = 0;
+                triangles[t + 1] = i;
+                triangles[t + 2] = 1;
+            }
+        }
+
+        Mesh mesh = new Mesh();
+
+        mesh.vertices = vertices;
+        mesh.uv = uvs;
+        mesh.triangles = triangles;
+
+        // Assign material instance to each particle
+        Material newMat = new Material(particleMat);
+        newMat.SetColor("_Color", color);
+
+        // Create a new particle object
+        GameObject newObj = new GameObject("particle");
+        newObj.AddComponent<MeshFilter>();
+        newObj.AddComponent<MeshRenderer>();
+        newObj.GetComponent<MeshFilter>().mesh = mesh;
+        newObj.GetComponent<MeshRenderer>().material = newMat;
+
+        /*// Add script and tag for debugging
+        newObj.AddComponent<ParticleAtt>();
+        newObj.layer = LayerMask.NameToLayer("Particles");
+        newObj.AddComponent<MeshCollider>();*/
+
+        // Add it into the list
+        newObj.transform.SetParent(transform);
     }
 
     #endregion
