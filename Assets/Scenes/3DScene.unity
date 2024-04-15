@@ -310,6 +310,7 @@ GameObject:
   - component: {fileID: 279557275}
   - component: {fileID: 279557274}
   - component: {fileID: 279557273}
+  - component: {fileID: 279557276}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -347,7 +348,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   particleQuantityPerAxis: 35
   centre: {x: 0, y: 0, z: 0}
-  size: 3.7
+  size: 12.22
   initialVel:
     x: 0
     y: 0
@@ -367,7 +368,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9cf5470d6891f2c4082eba5fc7564c92, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  shader: {fileID: 4800000, guid: a8c32d90e6c79ee438906130c980e02a, type: 3}
+  shader: {fileID: 4800000, guid: fa124074221e83547bc5f7d3fe2fcdb3, type: 3}
   scale: 0.05
   col: {r: 0, g: 0.23312998, b: 1, a: 1}
   colourMap:
@@ -427,6 +428,14 @@ MonoBehaviour:
   pressureMultiplier: 250
   nearPressureMultiplier: 2.5
   viscosityStrength: 0.001
+--- !u!33 &279557276
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 279557271}
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!1 &504727918
 GameObject:
   m_ObjectHideFlags: 0
