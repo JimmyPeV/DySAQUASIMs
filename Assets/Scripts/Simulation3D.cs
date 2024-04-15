@@ -1,90 +1,151 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Linq;
-using System.Threading.Tasks;
-using Unity.Mathematics;
 using UnityEngine;
+using Unity.Mathematics;
+using UnityEditor;
 
 public class Simulation3D : MonoBehaviour
 {
     #region Variables
-    ///////////////////////////////////////////////
-    /////////////                     /////////////
-    /////////////   Particle drawing  /////////////
-    /////////////                     /////////////
-    ///////////////////////////////////////////////
-    
-    private static int segments = 100;
-    private Material particleMat;
 
-    ////////////////////////////////////////
-    /////////////              /////////////
-    /////////////   VARIABLES  /////////////
-    /////////////              /////////////
-    ////////////////////////////////////////
-    
-    [Header ("Simulation Settings")]
-    public Vector3 boundsSize = new Vector3(10f, 10f, 10f);
-    private int seed = 1352;
-    public float collisionDamping = 1.0f;
-    public float gravity;
-    [Range(0.1f, 5.0f)] public float targetDensity;
-    public float pressureMultiplier;
-    
+    public event System.Action SimulationStepCompleted;
 
-    [Header("Particle Settings")]
-    public int particleQuantity;
-    public float particleSpacing = 0.5f;
-    [Range(0.1f, 1.0f)] public float particleSize = 0.1f;
+    [Header ("References")]
+    [SerializeField] private ComputeShader computeShader;
+    [SerializeField] private Spawner spawner;
+    [SerializeField] private Display display;
+    public Transform floorDisplay;
+
+    [Header ("Particle Simulation Settings")]
+    public float gravity = 0.0f;
+    [Range(0.0f, 1.0f)] public float collisionDamping = 0.8f;
     public float smoothingRadius = 1.0f;
-    [Range(0.1f, 1.0f)] public float mass = 1.0f;
+    public float targetDensity;
+    public float pressureMultiplier;
+    public float nearPressureMultiplier;
+    public float viscosityStrength;
+
+    //buffers
+    public ComputeBuffer positionBuffer {get; private set; }
+    public ComputeBuffer velocityBuffer {get; private set; }
+    public ComputeBuffer densityBuffer {get; private set;}
+    public ComputeBuffer predictedPositionsBuffer;
+    ComputeBuffer spatialIndexes;
+    ComputeBuffer spatialOffsets;
     
+    //kernels
+    const int externalForcesKernel = 0;
+    const int spatialHashKernel = 1;
+    const int densityKernel = 2;
+    const int pressureKernel = 3;
+    const int viscosityKernel = 4;
+    const int updatePositionsKernel = 5;
 
-    [Header("Particles Instances - Positions - Velocities - Densities")]
-    private GameObject[] particleInstances;
-    private List<GameObject> particleList;
-    private Vector3[] positions;
-    private Vector3[] predictedPosition;
-    private Vector3[] velocities;
-    private float[] densities;
+    GPUSort gpuSort;
 
-    /////////////////////////////////////////////////////
-    /////////////                           /////////////
-    /////////////   Spatial grid structure  /////////////
-    /////////////                           /////////////
-    /////////////////////////////////////////////////////
-    private Entry[] spatialLookup;
-    private int[] startIndices;
-    private Vector3[] cellOffsets;
+    Spawner.SpawnData spawnData;
 
     #endregion
 
     #region Simulation Start-Step
 
-    ////////////////////////////////////////////////////
-    /////////////                          /////////////
-    /////////////   SIMULATION START/STEP  /////////////
-    /////////////                          /////////////
-    ////////////////////////////////////////////////////
-
     private void Start() {
-        positions = new Vector3[particleQuantity];
-        velocities = new Vector3[particleQuantity];
-        densities = new float[particleQuantity];
+        float deltaTime = 1 / 60f;
+        Time.fixedDeltaTime = deltaTime;
 
-        GenerateParticles(particleQuantity);
-        //CreateParticlesInCube();
-        //CreateParticlesAtRandom(seed);
+        spawnData = spawner.GetSpawnData();
+
+        InitializeComputeBuffers();
     }
 
-    private void Update() {
-        SimulationStep(Time.deltaTime);
+    void FixedUpdate() {
+        //SimulationStep(Time.fixedDeltaTime);
+    }
+    void Update() {
+        SimulationStep();
     }
 
-    void SimulationStep(float deltaTime)
+    void InitializeComputeBuffers(){
+        int particleQuantity = spawnData.points.Length;
+        
+        //Start particle buffers
+        positionBuffer = ComputeHelper.CreateStructuredBuffer<float3>(particleQuantity);
+        predictedPositionsBuffer = ComputeHelper.CreateStructuredBuffer<float3>(particleQuantity);
+        velocityBuffer = ComputeHelper.CreateStructuredBuffer<float3>(particleQuantity);
+        densityBuffer = ComputeHelper.CreateStructuredBuffer<float2>(particleQuantity);
+        spatialIndexes = ComputeHelper.CreateStructuredBuffer<uint3>(particleQuantity);
+        spatialOffsets = ComputeHelper.CreateStructuredBuffer<uint>(particleQuantity);
+
+        SetInitialBufferData(spawnData);
+
+        // Init compute
+        ComputeHelper.SetBuffer(computeShader, positionBuffer, "Positions", externalForcesKernel, updatePositionsKernel);
+        ComputeHelper.SetBuffer(computeShader, predictedPositionsBuffer, "PredictedPositions", externalForcesKernel, spatialHashKernel, densityKernel, pressureKernel, viscosityKernel, updatePositionsKernel);
+        ComputeHelper.SetBuffer(computeShader, spatialIndexes, "SpatialIndices", spatialHashKernel, densityKernel, pressureKernel, viscosityKernel);
+        ComputeHelper.SetBuffer(computeShader, spatialOffsets, "SpatialOffsets", spatialHashKernel, densityKernel, pressureKernel, viscosityKernel);
+        ComputeHelper.SetBuffer(computeShader, densityBuffer, "Densities", densityKernel, pressureKernel, viscosityKernel);
+        ComputeHelper.SetBuffer(computeShader, velocityBuffer, "Velocities", externalForcesKernel, pressureKernel, viscosityKernel, updatePositionsKernel);
+
+        computeShader.SetInt("numParticles", positionBuffer.count);
+
+        gpuSort = new();
+        gpuSort.SetBuffers(spatialIndexes, spatialOffsets);
+
+        // Init display
+        display.Init(this);
+    }
+
+    void SimulationStep()
     {
+        ComputeHelper.Dispatch(computeShader, positionBuffer.count, kernelIndex: externalForcesKernel);
+        ComputeHelper.Dispatch(computeShader, positionBuffer.count, kernelIndex: spatialHashKernel);
+        gpuSort.SortAndCalculateOffsets();
+        ComputeHelper.Dispatch(computeShader, positionBuffer.count, kernelIndex: densityKernel);
+        ComputeHelper.Dispatch(computeShader, positionBuffer.count, kernelIndex: pressureKernel);
+        ComputeHelper.Dispatch(computeShader, positionBuffer.count, kernelIndex: viscosityKernel);
+        ComputeHelper.Dispatch(computeShader, positionBuffer.count, kernelIndex: updatePositionsKernel);
+    }
+
+    void SetInitialBufferData(Spawner.SpawnData spawnData)
+    {
+        float3[] allPoints = new float3[spawnData.points.Length];
+        System.Array.Copy(spawnData.points, allPoints, spawnData.points.Length);
+
+        positionBuffer.SetData(allPoints);
+        predictedPositionsBuffer.SetData(allPoints);
+        velocityBuffer.SetData(spawnData.velocities);
+    }
+
+    void UpdateSettings(float deltaTime){
+        Vector3 simBoundsSize = transform.localScale;
+        Vector3 simBoundsCentre = transform.position;
+
+        computeShader.SetFloat("deltaTime", deltaTime);
+        computeShader.SetFloat("gravity", gravity);
+        computeShader.SetFloat("collisionDamping", collisionDamping);
+        computeShader.SetFloat("smoothingRadius", smoothingRadius);
+        computeShader.SetFloat("targetDensity", targetDensity);
+        computeShader.SetFloat("pressureMultiplier", pressureMultiplier);
+        computeShader.SetFloat("nearPressureMultiplier", pressureMultiplier);
+        computeShader.SetFloat("viscosityStrength", viscosityStrength);
+        computeShader.SetVector("boundsSize", simBoundsSize);
+        computeShader.SetVector("centre", simBoundsCentre);
+
+        computeShader.SetMatrix("localToWorld", transform.localToWorldMatrix);
+        computeShader.SetMatrix("worldToLocal", transform.worldToLocalMatrix);
+    }
+
+    void OnDrawGizmos(){
+        // Draw Bounds
+        var m = Gizmos.matrix;
+        Gizmos.matrix = transform.localToWorldMatrix;
+        Gizmos.color = new Color(0, 1, 0, 0.5f);
+        Gizmos.DrawWireCube(Vector3.zero, Vector3.one);
+        Gizmos.matrix = m;
+    }
+
+    
+
+    /*void UpdateParticleMovement(float deltaTime){
+
         // Apply gravity and predict next position
         Parallel.For(0, particleQuantity, i =>
         {
@@ -93,7 +154,7 @@ public class Simulation3D : MonoBehaviour
         });
 
         //Update spatial lookup with predicted position
-        UpdateSpatialLookup(predictedPosition, smoothingRadius);
+        //UpdateSpatialLookup(predictedPosition, smoothingRadius);
 
         //Calculate densities
         Parallel.For(0, particleQuantity, i =>
@@ -117,10 +178,12 @@ public class Simulation3D : MonoBehaviour
             positions[i] += velocities[i] * deltaTime;
             ResolveCollisions(ref positions[i], ref velocities[i]);
         });
-    }
+    }*/
 
     #endregion
-    
+
+}
+ 
     #region Spatial 3D grid structure explanation
         /*
         Spatial 3D grid structure
@@ -163,180 +226,15 @@ public class Simulation3D : MonoBehaviour
         We then check if it is also inside of the smoothCircle of the sample point
         If inside, we then will update the properties of each point
         */
-    #endregion
-
-    #region Spatial 3D Structure
-    void InitializeSpatialStructure(){
-        spatialLookup = new Entry[particleQuantity];
-        startIndices = new int[particleQuantity];
-
-        cellOffsets = new Vector3[]{
-            //Layer 0 (z = 0)
-            new Vector3(0, 0, 0), //Center cell
-            new Vector3(1, 0, 0), //Right cell
-            new Vector3(-1, 0, 0), //Left cell
-
-            new Vector3(0, 1, 0), //Top Center cell
-            new Vector3(1, 1, 0), //Top Right cell
-            new Vector3(-1, 1, 0), //Top Left cell
-
-            new Vector3(0, -1, 0), //Bottom Center cell
-            new Vector3(1, -1, 0), //Bottom Right cell
-            new Vector3(-1, -1, 0), //Bottom Left cell
-
-            //Layer 1 (z = 1)
-            new Vector3(0, 0, 1), //Center cell
-            new Vector3(1, 0, 1), //Right cell
-            new Vector3(-1, 0, 1), //Left cell
-
-            new Vector3(0, 1, 1), //Top Center cell
-            new Vector3(1, 1, 1), //Top Right cell
-            new Vector3(-1, 1, 1), //Top Left cell
-
-            new Vector3(0, -1, 1), //Bottom Center cell
-            new Vector3(1, -1, 1), //Bottom Right cell
-            new Vector3(-1, -1, 1), //Bottom Left cell
-
-            //Layer -1 (z = -1)
-            new Vector3(0, 0, -1), //Center cell
-            new Vector3(1, 0, -1), //Right cell
-            new Vector3(-1, 0, -1), //Left cell
-
-            new Vector3(0, 1, -1), //Top Center cell
-            new Vector3(1, 1, -1), //Top Right cell
-            new Vector3(-1, 1, -1), //Top Left cell
-
-            new Vector3(0, -1, -1), //Bottom Center cell
-            new Vector3(1, -1, -1), //Bottom Right cell
-            new Vector3(-1, -1, -1), //Bottom Left cell
-        };
-    }
-
-    public void UpdateSpatialLookup(Vector3[] points, float radius){
-        this.positions = points;
-        this.smoothingRadius = radius;
-
-        //Create spatial lookup (unordened)
-        Parallel.For(0, points.Length, i=>
-        {
-            (int cellX, int cellY, int cellZ) = PositionToCellCoord(points[i], radius);
-            uint cellKey = GetKeyFromCellHash(GetCellHash(cellX, cellY, cellZ));
-            spatialLookup[i] = new Entry(i, cellKey);
-            startIndices[i] = int.MaxValue; //Infinite
-        });
-
-        //Sort by cell key
-        Array.Sort(spatialLookup);
-
-        //Calculate start indices of each unique cell key in the spatial lookup
-        Parallel.For(0, points.Length, i=>{
-            uint key = spatialLookup[i].hashKey;
-            uint keyPrev = i == 0 ? uint.MaxValue : spatialLookup[i - 1].hashKey;
-            if(key != keyPrev){
-                startIndices[key] = i;
-            }
-        });
-    }
-
-    //Convert a cell coordinate into a single number.
-    //Hash collisions (diferent cells -> same value) are unavoidable, but we want to try at least
-    //to minimize collisions for nearby cells. There must be a better way...
-
-    private uint GetCellHash(int cellX, int cellY, int cellZ)
-    {
-        uint a = (uint)cellX * 1301;
-        uint b = (uint)cellY * 5449;
-        uint c = (uint)cellZ * 14983;
-
-        return a + b + c;
-    }
-
-    //Warp the hash value around the length of the array (so it can be used as an index)
-    private uint GetKeyFromCellHash(uint hash)
-    {
-        return hash % (uint)spatialLookup.Length;
-    }
-
-    //Convert a position to the coordinate of the cell it is within
-    public (int x, int y, int z) PositionToCellCoord(Vector3 point, float radius)
-    {
-        int cellX = (int)(point.x / radius);
-        int cellY = (int)(point.y / radius);
-        int cellZ = (int)(point.z / radius);
-
-        return (cellX, cellY, cellZ);
-    }
-
-    public List<int> ForeachPointWithinRadius(Vector3 samplePoint){
-        List<int> validPointsInsideRadius = new List<int>();
-
-        //Find which cell the sample point is in (centre of 3x3x3)
-        (int centreX, int centreY, int centreZ) = PositionToCellCoord(samplePoint, smoothingRadius);
-        float powRadius = smoothingRadius * smoothingRadius;
-
-        foreach (Vector3 offset in cellOffsets)
-        {
-            int offsetX = (int)offset.x;
-            int offsetY = (int)offset.y;
-            int offsetZ = (int)offset.z;
-
-            //Get key of current cell, then loop over all points that share that key
-            uint key = GetKeyFromCellHash(GetCellHash(centreX + offsetX, centreY + offsetY, centreZ + offsetZ));
-            int cellStartIndex = startIndices[key];
-
-            for (int i = cellStartIndex; i < spatialLookup.Length; i++)
-            {
-                //Exit loop if we're no longer looking at the correct cell
-                if(spatialLookup[i].hashKey != key) break;
-
-                int particleIndex = spatialLookup[i].index;
-
-                float sqrDst = (particleInstances[particleIndex].transform.position - samplePoint).sqrMagnitude;
-
-                //Test if the point is inside the radius
-                if(sqrDst <= powRadius)
-                {
-                    validPointsInsideRadius.Add(particleIndex);
-                }
-            }
-        }
-        return validPointsInsideRadius;
-    }
-
-    #endregion
-
-    #region Pressure & Densities
+    
     ///////////////////////////////////////////////////
     /////////////                         /////////////
     /////////////   PRESSURE & DENSITIES  /////////////
     /////////////                         /////////////
     ///////////////////////////////////////////////////
     
-    private Vector3 CalculatePressureForce(int particleIndex)
-    {
-        Vector3 pressureForce = Vector3.zero;
-        int threadSafeSeed = seed + particleIndex;
-        Unity.Mathematics.Random rng = new Unity.Mathematics.Random((uint)threadSafeSeed);
-
-        for (int i = 0; i < particleQuantity; i++)
-        {
-            if(particleIndex == i)
-            {
-                continue;
-            }
-            Vector3 offset = positions[i] - positions[particleIndex];
-            float dst = offset.magnitude;
-            Vector3 dir = dst == 0 ? GetRandomDir(rng) : offset / dst;
-
-            float slope = SmoothingKernelDerivative(smoothingRadius, dst);
-            float density = densities[i];
-            float sharedPressure = CalculateSharedPressure(density, densities[particleIndex]);
-            pressureForce += sharedPressure * dir * slope * mass / density;
-        }
-        
-        return pressureForce;
-    }
-
+    
+/*
     private float CalculateSharedPressure(float densityA, float densityB)
     {
         float pressureA = ConvertDensityToPressure(densityA);
@@ -363,22 +261,6 @@ public class Simulation3D : MonoBehaviour
         return (dst - radius) * scale;
     }
 
-    private float CalculateDensity(Vector3 thisParticle)
-    {
-        float density = 0;
-        const float mass = 1;
-        
-        //List<int> pointsIdx = ForeachPointWithinRadius(thisParticle);
-        foreach (Vector3 position in positions)
-        {
-            float dst = (position - thisParticle).magnitude;
-            float influence = SmoothingKernel(smoothingRadius, dst);
-            density += mass * influence;
-        }
-
-        return density;
-    }
-
     void UpdateDensities()
     {
         Parallel.For(0, particleQuantity, i =>
@@ -387,32 +269,7 @@ public class Simulation3D : MonoBehaviour
         });
     }
 
-    float ConvertDensityToPressure(float density) //this is more for gas beahviours but it will do for now
-    {
-        float densityError = density - targetDensity;
-        float pressure = densityError * pressureMultiplier;
-
-        return pressure;
-    }
-
-    private void ResolveCollisions(ref Vector3 position, ref Vector3 velocity)
-    {
-        Vector3 adjustedBounds = boundsSize - (Vector3.one * particleSize * 2);
-        Vector3 halfBounds = adjustedBounds / 2;
-
-        if(Mathf.Abs(position.x) > halfBounds.x){
-            position.x = halfBounds.x * Mathf.Sign(position.x);
-            velocity.x *= -1 * collisionDamping;
-        }
-        if(Mathf.Abs(position.y) > halfBounds.y){
-            position.y = halfBounds.y * Mathf.Sign(position.y);
-            velocity.y *= -1 * collisionDamping;
-        }
-        if(Mathf.Abs(position.z) > halfBounds.z){
-            position.z = halfBounds.z * Mathf.Sign(position.z);
-            velocity.z *= -1 * collisionDamping;
-        }
-    }
+    
 
     #endregion
 
@@ -440,6 +297,28 @@ public class Simulation3D : MonoBehaviour
             Entry entry = obj as Entry;
             return this.hashKey.CompareTo(entry.hashKey);
         }
+    }
+
+    public enum kernels{
+        CalculateVelocity = 0,
+        CalculateDensities = 1,
+        CalculatePressureForce = 2,
+        UpdatePositions = 3,
+        HashParticles = 4,
+        CalculateCellOffsets = 5,
+        ClearCellOffsets = 6
+
+    }
+
+    public static void ComputeHelper.Dispatch(ComputeShader computeShader, int numParticles, int kernelIndex){
+        uint x, y, z;
+        computeShader.GetKernelThreadGroupSizes(kernelIndex, out x, out y, out z);
+
+        int numGroupsX = Mathf.CeilToInt(numParticles / (float)x);
+        int numGroupsY = Mathf.CeilToInt(1 / (float)y);
+        int numGroupsZ = Mathf.CeilToInt(1 / (float)z);
+
+        computeShader.ComputeHelper.Dispatch(kernelIndex, numGroupsX, numGroupsY, numGroupsZ);
     }
 
     float3[] GenerateParticles(int numParticles){
@@ -533,11 +412,50 @@ public class Simulation3D : MonoBehaviour
     }
 
 
-    private void OnDrawGizmos()
+    void DrawBoundary()
     {
-        Gizmos.color = UnityEngine.Color.yellow;
-        Gizmos.DrawWireCube(transform.position, boundsSize);
+        if (boundsSize == Vector3.zero || boundsSize == null)
+        {
+            return;
+        }
+
+        if (boundingBoxRenderer == null)
+        {
+            return;
+        }
+
+        boundingBoxRenderer.positionCount = 13;
+
+        float halfX = boundsSize.x / 2;
+        float halfY = boundsSize.y / 2;
+        float halfZ = boundsSize.z / 2;
+
+        Vector3[] corners = new Vector3[]
+        {
+            new Vector3(-halfX, -halfY, -halfZ),
+            new Vector3(halfX, -halfY, -halfZ),
+            new Vector3(halfX, -halfY, halfZ),
+            new Vector3(-halfX, -halfY, halfZ),
+            new Vector3(-halfX, -halfY, -halfZ),
+
+            new Vector3(-halfX, halfY, -halfZ),  
+            new Vector3(halfX, halfY, -halfZ),  
+            new Vector3(halfX, halfY, halfZ),   
+            new Vector3(-halfX, halfY, halfZ),  
+            new Vector3(-halfX, halfY, -halfZ),  
+
+            
+            new Vector3(-halfX, -halfY, -halfZ), 
+            new Vector3(halfX, -halfY, -halfZ), 
+            new Vector3(halfX, halfY, -halfZ)
+        };
+
+        for (int i = 0; i < corners.Length; i++)
+        {
+            boundingBoxRenderer.SetPosition(i, corners[i]);
+        }
     }
+
 
     void DrawParticles(){
         //Delete previous particles
@@ -550,70 +468,77 @@ public class Simulation3D : MonoBehaviour
         {
             DrawCircle(positions[i], particleSize, UnityEngine.Color.blue);
         }
-        foreach (Transform trnsfrm in transform)
+        foreach (Transform trans in transform)
         {
-            particleList.Add(trnsfrm.gameObject);
+            particleList.Add(trans.gameObject);
         }
     }
 
     //Grab this circle gizmo draw for rendering and optimization pruposes, 
     // since the original sphere made by unity its very heavy on graphical terms.
-    void DrawCircle(Vector2 position, float radius, UnityEngine.Color color){
-        Vector3[] vertices = new Vector3[segments + 1];
-        Vector2[] uvs = new Vector2[vertices.Length];
-        int[] triangles = new int[segments * 3];
+    void DrawCircle(Vector3 position, float radius, UnityEngine.Color color){
+        int vertexCount = (segments + 1) * (layers + 1);
+        Vector3[] vertices = new Vector3[vertexCount];
+        Vector2[] uvs = new Vector2[vertexCount];
+        int[] triangles = new int[segments * layers * 6];
 
-        vertices[0] = new Vector3(position.x, position.y, 0);  // center vertex
-        uvs[0] = new Vector2(0.5f, 0.5f);
+        float phiStep = Mathf.PI / layers;
+        float thetaStep = 2 * Mathf.PI / segments;
 
-        for (int i = 1, t = 0; i < vertices.Length; i++, t += 3)
-        {
-            float angle = (float)(i - 1) / segments * 360 * Mathf.Deg2Rad;
-            float x = Mathf.Sin(angle) * radius + position.x;
-            float y = Mathf.Cos(angle) * radius + position.y;
+        // Generar los vértices de la esfera
+        int vertexIndex = 0;
+        for (int layer = 0; layer <= layers; layer++) {
+            float phi = phiStep * layer;
 
-            vertices[i] = new Vector3(x, y, 0);
-            uvs[i] = new Vector2((x / radius + 1) * 0.5f, (y / radius + 1) * 0.5f);
+            for (int segment = 0; segment <= segments; segment++) {
+                float theta = thetaStep * segment;
 
-            if (i < vertices.Length - 1)
-            {
-                triangles[t] = 0;
-                triangles[t + 1] = i;
-                triangles[t + 2] = i + 1;
-            }
-            else
-            {
-                triangles[t] = 0;
-                triangles[t + 1] = i;
-                triangles[t + 2] = 1;
+                Vector3 vertex = new Vector3(
+                    position.x + radius * Mathf.Sin(phi) * Mathf.Cos(theta),
+                    position.y + radius * Mathf.Sin(phi) * Mathf.Sin(theta),
+                    position.z + radius * Mathf.Cos(phi)
+                );
+
+                vertices[vertexIndex] = vertex;
+                uvs[vertexIndex] = new Vector2((float)segment / segments, (float)layer / layers);
+                vertexIndex++;
             }
         }
 
-        Mesh mesh = new Mesh();
+        // Generar los triángulos de la esfera
+        int triangleIndex = 0;
+        for (int layer = 0; layer < layers; layer++) {
+            for (int segment = 0; segment < segments; segment++) {
+                int current = layer * (segments + 1) + segment;
+                int next = current + segments + 1;
 
+                triangles[triangleIndex++] = current;
+                triangles[triangleIndex++] = next;
+                triangles[triangleIndex++] = current + 1;
+
+                triangles[triangleIndex++] = current + 1;
+                triangles[triangleIndex++] = next;
+                triangles[triangleIndex++] = next + 1;
+            }
+        }
+
+        // Crear la malla y asignarla al objeto
+        Mesh mesh = new Mesh();
         mesh.vertices = vertices;
         mesh.uv = uvs;
         mesh.triangles = triangles;
 
-        // Assign material instance to each particle
         Material newMat = new Material(particleMat);
         newMat.SetColor("_Color", color);
 
-        // Create a new particle object
-        GameObject newObj = new GameObject("particle");
+        GameObject newObj = new GameObject("sphereParticle");
         newObj.AddComponent<MeshFilter>();
         newObj.AddComponent<MeshRenderer>();
         newObj.GetComponent<MeshFilter>().mesh = mesh;
         newObj.GetComponent<MeshRenderer>().material = newMat;
 
-        /*// Add script and tag for debugging
-        newObj.AddComponent<ParticleAtt>();
-        newObj.layer = LayerMask.NameToLayer("Particles");
-        newObj.AddComponent<MeshCollider>();*/
-
-        // Add it into the list
         newObj.transform.SetParent(transform);
     }
-
+*/
     #endregion
-}
+
