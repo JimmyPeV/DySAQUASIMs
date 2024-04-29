@@ -6,7 +6,11 @@ public class Simulation3D : MonoBehaviour
 {
     #region Variables
 
-    public event System.Action SimulationStepCompleted;
+    //public event System.Action SimulationStepCompleted;
+    public Transform collisionObject;
+    public float timeScale = 1;
+    public bool fixedTimeStep;
+    public int iterationsByFrame;
 
     [Header ("References")]
     [SerializeField] private ComputeShader computeShader;
@@ -48,24 +52,30 @@ public class Simulation3D : MonoBehaviour
     #region Simulation Start-Step
 
     private void Start() {
-        float deltaTime = 1 / 60f;
-        Time.fixedDeltaTime = deltaTime;
-
-        spawnData = spawner.GetSpawnData();
-
         InitializeComputeBuffers();
     }
 
     void FixedUpdate() {
-        //SimulationStep(Time.fixedDeltaTime);
+        if(fixedTimeStep){
+            RunSimulationFrameByFrame(Time.fixedDeltaTime);
+        }
     }
     void Update() {
-        SimulationStep();
+        if(!fixedTimeStep){
+            RunSimulationFrameByFrame(Time.deltaTime);
+        }
+        floorDisplay.transform.localScale = new Vector3(1, 1/ transform.localScale.y * 0.1f, 1);
+        //SimulationStep();
     }
 
     void InitializeComputeBuffers(){
+        float deltaTime = 1/60f;
+        Time.fixedDeltaTime = deltaTime;
+
+        spawnData = spawner.GetSpawnData();
+
         int particleQuantity = spawnData.points.Length;
-        
+
         //Start particle buffers
         positionBuffer = ComputeHelper.CreateStructuredBuffer<float3>(particleQuantity);
         predictedPositionsBuffer = ComputeHelper.CreateStructuredBuffer<float3>(particleQuantity);
@@ -91,6 +101,17 @@ public class Simulation3D : MonoBehaviour
 
         // Init display
         display.Init(this);
+    }
+
+    void RunSimulationFrameByFrame(float frameTime){
+        float timeStep = frameTime / iterationsByFrame * timeScale;
+
+        UpdateSettings(timeStep);
+
+        for (int i = 0; i < iterationsByFrame; i++)
+        {
+            SimulationStep();
+        }
     }
 
     void SimulationStep()
@@ -128,6 +149,8 @@ public class Simulation3D : MonoBehaviour
         computeShader.SetFloat("viscosityStrength", viscosityStrength);
         computeShader.SetVector("boundsSize", simBoundsSize);
         computeShader.SetVector("centre", simBoundsCentre);
+        computeShader.SetVector("objectPosition", collisionObject.transform.position);
+        computeShader.SetVector("objectSize", collisionObject.transform.localScale);
 
         computeShader.SetMatrix("localToWorld", transform.localToWorldMatrix);
         computeShader.SetMatrix("worldToLocal", transform.worldToLocalMatrix);

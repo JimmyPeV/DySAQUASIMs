@@ -1,4 +1,3 @@
-// Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel ExternalForces
 #pragma kernel UpdateSpatialHash
 #pragma kernel CalculateDensities
@@ -6,22 +5,24 @@
 #pragma kernel CalculateViscosity
 #pragma kernel UpdatePositions
 
-//threads
+// Includes
+#include "./FluidMaths3D.hlsl"
+#include "./SpatialHash3D.hlsl"
+
 static const int NumThreads = 64;
 
-//buffers
+// Buffers
 RWStructuredBuffer<float3> Positions;
 RWStructuredBuffer<float3> PredictedPositions;
 RWStructuredBuffer<float3> Velocities;
-RWStructuredBuffer<float2> Densities;
-RWStructuredBuffer<uint3> SpatialIndexes;
-RWStructuredBuffer<uint> SpatialOffsets;
+RWStructuredBuffer<float2> Densities; // Density, Near Density
+RWStructuredBuffer<uint3> SpatialIndices; // used for spatial hashing
+RWStructuredBuffer<uint> SpatialOffsets; // used for spatial hashing
 
-//attributes
-const uint particleQuantity;
+// Settings
+const uint numParticles;
 const float gravity;
 const float deltaTime;
-const float3 boundsSize;
 const float collisionDamping;
 const float smoothingRadius;
 const float targetDensity;
@@ -29,23 +30,27 @@ const float pressureMultiplier;
 const float nearPressureMultiplier;
 const float viscosityStrength;
 const float edgeForce;
-const float edgeForceDistance;
+const float edgeForceDst;
+const float3 boundsSize;
 const float3 centre;
+float3 objectPosition;
+float3 objectSize;
 
-//Matrix
-float3x3 localToWorld;
-float3x3 worldToLocal;
+const float4x4 localToWorld;
+const float4x4 worldToLocal;
 
-float ConvertDensityToPressure(float density)
+const float2 interactionInputPoint;
+const float interactionInputStrength;
+const float interactionInputRadius;
+
+float PressureFromDensity(float density)
 {
-    float densityError = density - targetDensity;
-    float pressure = densityError * pressureMultiplier;
-
-    return pressure;
+	return (density - targetDensity) * pressureMultiplier;
 }
 
-float NearPressureFromDensity(float nearDensity){
-    return nearDensity * nearPressureMultiplier;
+float NearPressureFromDensity(float nearDensity)
+{
+	return nearDensity * nearPressureMultiplier;
 }
 
 void ResolveCollisions(uint particleIndex)
@@ -81,10 +86,50 @@ void ResolveCollisions(uint particleIndex)
 
 }
 
-[numthreads(NumThreads, 1, 1)]
-void CalculateDensities(uint3 id: SV_DispatchThreadID)
+[numthreads(NumThreads,1,1)]
+void ExternalForces (uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= numParticles) return;
+	if (id.x >= numParticles) return;
+
+	// External forces (gravity)
+	Velocities[id.x] += float3(0, gravity, 0) * deltaTime;
+	// External forces (object/s)
+	float objectEffectiveSize = (objectSize.x + 
+		objectSize.y + 
+		objectSize.z) / 3.0;
+
+	// External forces from objects
+	float3 directionToObject = objectPosition - Positions[id.x];
+	float distanceToObject = length(directionToObject);
+	float3 normalizedDirection = directionToObject / distanceToObject;
+
+	// Adjust force magnitude based on object size
+	float forceMagnitude = -10.0 * objectEffectiveSize / (distanceToObject * distanceToObject);
+	Velocities[id.x] += normalizedDirection * forceMagnitude * deltaTime;
+
+	// Predict
+	PredictedPositions[id.x] = Positions[id.x] + Velocities[id.x] * 1 / 120.0;
+}
+
+[numthreads(NumThreads,1,1)]
+void UpdateSpatialHash (uint3 id : SV_DispatchThreadID)
+{
+	if (id.x >= numParticles) return;
+
+	// Reset offsets
+	SpatialOffsets[id.x] = numParticles;
+	// Update index buffer
+	uint index = id.x;
+	int3 cell = GetCell3D(PredictedPositions[index], smoothingRadius);
+	uint hash = HashCell3D(cell);
+	uint key = KeyFromHash(hash, numParticles);
+	SpatialIndices[id.x] = uint3(index, hash, key);
+}
+
+[numthreads(NumThreads,1,1)]
+void CalculateDensities (uint3 id : SV_DispatchThreadID)
+{
+	if (id.x >= numParticles) return;
 
 	float3 pos = PredictedPositions[id.x];
 	int3 originCell = GetCell3D(pos, smoothingRadius);
@@ -126,10 +171,10 @@ void CalculateDensities(uint3 id: SV_DispatchThreadID)
 	Densities[id.x] = float2(density, nearDensity);
 }
 
-[numthreads(NumThreads, 1, 1)]
-void CalculatePressureForce(uint3 id: SV_DispatchThreadID)
+[numthreads(NumThreads,1,1)]
+void CalculatePressureForce (uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= numParticles) return;
+	if (id.x >= numParticles) return;
 
 	// Calculate pressure
 	float density = Densities[id.x][0];
@@ -190,7 +235,8 @@ void CalculatePressureForce(uint3 id: SV_DispatchThreadID)
 	Velocities[id.x] += acceleration * deltaTime;
 }
 
-[numthreads(NumThreads, 1,1)]
+
+[numthreads(NumThreads,1,1)]
 void CalculateViscosity (uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numParticles) return;

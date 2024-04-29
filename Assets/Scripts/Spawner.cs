@@ -37,11 +37,12 @@ public class Spawner : MonoBehaviour
                     float3 jitter = UnityEngine.Random.insideUnitSphere * jitterStrength;
                     points[i] = new float3(px, py, pz) + jitter;
                     velocities[i] = initialVel;
+                    
                     i++;
                 }
             }
         }
-
+        //Debug.Log(velocities[0]);
         return new SpawnData() { points = points, velocities = velocities };
     }
 
