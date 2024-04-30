@@ -2,6 +2,7 @@ using UnityEngine;
 using Unity.Mathematics;
 using UnityEditor;
 using System.Collections.Generic;
+using System.Linq;
 
 public class Simulation3D : MonoBehaviour
 {
@@ -78,7 +79,12 @@ public class Simulation3D : MonoBehaviour
         spawnData = spawner.GetSpawnData();
 
         int particleQuantity = spawnData.points.Length;
-        Vector3[] voxelPositions = LoadVoxelData();
+
+        Vector3[] voxelPositions = new Vector3[voxelModel.Count];
+        for (int i = 0; i < voxelModel.Count; i++)
+        {
+            voxelPositions[i] = voxelModel[i];
+        }
         voxelBuffer = new ComputeBuffer(voxelPositions.Length, sizeof(float) *3);
         voxelBuffer.SetData(voxelPositions);
 
@@ -157,6 +163,8 @@ public class Simulation3D : MonoBehaviour
         computeShader.SetVector("centre", simBoundsCentre);
         computeShader.SetVector("objectPosition", collisionObject.transform.position);
         computeShader.SetVector("objectSize", collisionObject.transform.localScale);
+
+        computeShader.SetBuffer(updatePositionsKernel, "VoxelPositions", voxelBuffer);
 
         computeShader.SetMatrix("localToWorld", transform.localToWorldMatrix);
         computeShader.SetMatrix("worldToLocal", transform.worldToLocalMatrix);

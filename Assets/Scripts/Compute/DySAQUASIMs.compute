@@ -18,6 +18,7 @@ RWStructuredBuffer<float3> Velocities;
 RWStructuredBuffer<float2> Densities; // Density, Near Density
 RWStructuredBuffer<uint3> SpatialIndices; // used for spatial hashing
 RWStructuredBuffer<uint> SpatialOffsets; // used for spatial hashing
+RWStructuredBuffer<float3> VoxelPositions; // used for voxel objects
 
 // Settings
 const uint numParticles;
@@ -93,6 +94,17 @@ void ExternalForces (uint3 id : SV_DispatchThreadID)
 
 	// External forces (gravity)
 	Velocities[id.x] += float3(0, gravity, 0) * deltaTime;
+	
+	float3 particlePosition = Positions[id.x];
+    float3 particleVelocity = Velocities[id.x];
+
+    // Simple collision detection
+    for (int i = 0; i < VoxelPositions.Length; i++) {
+        if (length(particlePosition - VoxelPositions[i]) < smoothingRadius) {
+            // Basic response: reflect particle velocity
+            particleVelocity = reflect(particleVelocity, normalize(particlePosition - VoxelPositions[i]));
+        }
+    }
 
 	// Predict
 	PredictedPositions[id.x] = Positions[id.x] + Velocities[id.x] * 1 / 120.0;
