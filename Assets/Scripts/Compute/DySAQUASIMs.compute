@@ -93,19 +93,6 @@ void ExternalForces (uint3 id : SV_DispatchThreadID)
 
 	// External forces (gravity)
 	Velocities[id.x] += float3(0, gravity, 0) * deltaTime;
-	// External forces (object/s)
-	float objectEffectiveSize = (objectSize.x + 
-		objectSize.y + 
-		objectSize.z) / 3.0;
-
-	// External forces from objects
-	float3 directionToObject = objectPosition - Positions[id.x];
-	float distanceToObject = length(directionToObject);
-	float3 normalizedDirection = directionToObject / distanceToObject;
-
-	// Adjust force magnitude based on object size
-	float forceMagnitude = -10.0 * objectEffectiveSize / (distanceToObject * distanceToObject);
-	Velocities[id.x] += normalizedDirection * forceMagnitude * deltaTime;
 
 	// Predict
 	PredictedPositions[id.x] = Positions[id.x] + Velocities[id.x] * 1 / 120.0;
