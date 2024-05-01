@@ -18,7 +18,6 @@ public class Simulation3D : MonoBehaviour
     [SerializeField] private ComputeShader computeShader;
     [SerializeField] private Spawner spawner;
     [SerializeField] private Display display;
-    public List<Vector3Int> voxelModel;
     public Transform floorDisplay;
 
     [Header ("Particle Simulation Settings")]
@@ -37,8 +36,8 @@ public class Simulation3D : MonoBehaviour
     public ComputeBuffer predictedPositionsBuffer;
     ComputeBuffer spatialIndexes;
     ComputeBuffer spatialOffsets;
-    ComputeBuffer voxelBuffer;
-    
+
+
     //kernels
     const int externalForcesKernel = 0;
     const int spatialHashKernel = 1;
@@ -79,14 +78,6 @@ public class Simulation3D : MonoBehaviour
         spawnData = spawner.GetSpawnData();
 
         int particleQuantity = spawnData.points.Length;
-
-        Vector3[] voxelPositions = new Vector3[voxelModel.Count];
-        for (int i = 0; i < voxelModel.Count; i++)
-        {
-            voxelPositions[i] = voxelModel[i];
-        }
-        voxelBuffer = new ComputeBuffer(voxelPositions.Length, sizeof(float) *3);
-        voxelBuffer.SetData(voxelPositions);
 
         //Start particle buffers
         positionBuffer = ComputeHelper.CreateStructuredBuffer<float3>(particleQuantity);
@@ -163,8 +154,6 @@ public class Simulation3D : MonoBehaviour
         computeShader.SetVector("centre", simBoundsCentre);
         computeShader.SetVector("objectPosition", collisionObject.transform.position);
         computeShader.SetVector("objectSize", collisionObject.transform.localScale);
-
-        computeShader.SetBuffer(updatePositionsKernel, "VoxelPositions", voxelBuffer);
 
         computeShader.SetMatrix("localToWorld", transform.localToWorldMatrix);
         computeShader.SetMatrix("worldToLocal", transform.worldToLocalMatrix);
