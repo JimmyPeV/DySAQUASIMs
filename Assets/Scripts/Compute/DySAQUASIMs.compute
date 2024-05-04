@@ -105,7 +105,7 @@ void ExternalForces (uint3 id : SV_DispatchThreadID)
 	float3 normalizedDirection = directionToObject / distanceToObject;
 
 	// Adjust force magnitude based on object size
-	float forceMagnitude = -10.0 * objectEffectiveSize / (distanceToObject * distanceToObject);
+	float forceMagnitude = -5 * objectEffectiveSize / (distanceToObject * distanceToObject);
 	Velocities[id.x] += normalizedDirection * forceMagnitude * deltaTime;
 
 	// Predict

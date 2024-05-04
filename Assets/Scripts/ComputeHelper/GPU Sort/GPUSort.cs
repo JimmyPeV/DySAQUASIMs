@@ -12,6 +12,7 @@ public class GPUSort
     public GPUSort()
     {
         sortCompute = ComputeHelper.LoadComputeShader("BitonicMergeSort");
+        //sortCompute = ComputeHelper.LoadComputeShader("BitonicMergeSortEnhanced");
     }
 
     public void SetBuffers(ComputeBuffer indexBuffer, ComputeBuffer offsetBuffer)

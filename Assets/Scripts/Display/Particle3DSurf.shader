@@ -22,10 +22,10 @@ Shader "Instanced/Particle3DSurf" {
 			};
 
 
-		#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
-			StructuredBuffer<float3> Positions;
-			StructuredBuffer<float3> Velocities;
-		#endif
+			#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
+				StructuredBuffer<float3> Positions;
+				StructuredBuffer<float3> Velocities;
+			#endif
 
 
 
@@ -42,28 +42,28 @@ Shader "Instanced/Particle3DSurf" {
 				UNITY_INITIALIZE_OUTPUT(Input, o);
 				o.uv_MainTex = v.texcoord.xy;
 
-	#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
-				float speed = length(Velocities[unity_InstanceID]);
-				float speedT = saturate(speed / velocityMax);
-				float colT = speedT;
-				o.colour = tex2Dlod(ColourMap, float4(colT, 0.5,0,0));
-	#endif
+				#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
+							float speed = length(Velocities[unity_InstanceID]);
+							float speedT = saturate(speed / velocityMax);
+							float colT = speedT;
+							o.colour = tex2Dlod(ColourMap, float4(colT, 0.5,0,0));
+				#endif
 			}
 
 			void setup()
 			{
-			#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
-				float3 pos = Positions[unity_InstanceID];
+				#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
+					float3 pos = Positions[unity_InstanceID];
 
-				unity_ObjectToWorld._11_21_31_41 = float4(scale, 0, 0, 0);
-				unity_ObjectToWorld._12_22_32_42 = float4(0, scale, 0, 0);
-				unity_ObjectToWorld._13_23_33_43 = float4(0, 0, scale, 0);
-				unity_ObjectToWorld._14_24_34_44 = float4(pos, 1);
-				unity_WorldToObject = unity_ObjectToWorld;
-				unity_WorldToObject._14_24_34 *= -1;
-				unity_WorldToObject._11_22_33 = 1.0f / unity_WorldToObject._11_22_33;
+					unity_ObjectToWorld._11_21_31_41 = float4(scale, 0, 0, 0);
+					unity_ObjectToWorld._12_22_32_42 = float4(0, scale, 0, 0);
+					unity_ObjectToWorld._13_23_33_43 = float4(0, 0, scale, 0);
+					unity_ObjectToWorld._14_24_34_44 = float4(pos, 1);
+					unity_WorldToObject = unity_ObjectToWorld;
+					unity_WorldToObject._14_24_34 *= -1;
+					unity_WorldToObject._11_22_33 = 1.0f / unity_WorldToObject._11_22_33;
 
-			#endif
+				#endif
 			}
 
 			half _Glossiness;
@@ -77,5 +77,5 @@ Shader "Instanced/Particle3DSurf" {
 			}
 			ENDCG
 		}
-			FallBack "Diffuse"
+	FallBack "Diffuse"
 }
