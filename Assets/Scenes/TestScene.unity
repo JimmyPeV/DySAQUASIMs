@@ -764,6 +764,11 @@ PrefabInstance:
       objectReference: {fileID: 4800000, guid: fa124074221e83547bc5f7d3fe2fcdb3, type: 3}
     - target: {fileID: 7196938706310779985, guid: d8291d8eec3a8374696083e841e85733,
         type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7196938706310779985, guid: d8291d8eec3a8374696083e841e85733,
+        type: 3}
       propertyPath: meshScale
       value: 0.08
       objectReference: {fileID: 0}
@@ -771,7 +776,7 @@ PrefabInstance:
         type: 3}
       propertyPath: displayShader
       value: 
-      objectReference: {fileID: 4800000, guid: fa124074221e83547bc5f7d3fe2fcdb3, type: 3}
+      objectReference: {fileID: 4800000, guid: 384f0767256086d4a9618a8b23c43715, type: 3}
     - target: {fileID: 7196938706310779985, guid: d8291d8eec3a8374696083e841e85733,
         type: 3}
       propertyPath: displayColor.a

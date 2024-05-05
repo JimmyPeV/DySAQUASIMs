@@ -32,7 +32,8 @@ public class Display : MonoBehaviour
     {
         displayMaterial = new Material(displayShader);
         displayMaterial.SetBuffer("Positions", simulation.positionBuffer);
-        displayMaterial.SetBuffer("Velocities", simulation.velocityBuffer);
+        displayMaterial.SetBuffer("Densities", simulation.densityBuffer);
+        //displayMaterial.SetBuffer("Velocities", simulation.velocityBuffer);
     }
     private void GenerateMesh()
     {
@@ -79,7 +80,7 @@ public class Display : MonoBehaviour
     {
         displayMaterial.SetFloat("scale", meshScale);
         displayMaterial.SetColor("colour", displayColor);
-        displayMaterial.SetFloat("velocityMax", maxVelocityDisplay);
+        //displayMaterial.SetFloat("velocityMax", maxVelocityDisplay);
     }
     private void UpdateTransformMatrix()
     {
