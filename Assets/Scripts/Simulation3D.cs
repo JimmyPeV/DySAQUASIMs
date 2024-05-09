@@ -36,6 +36,8 @@ public class Simulation3D : MonoBehaviour
     public ComputeBuffer predictedPositionsBuffer;
     private ComputeBuffer spatialIndexes;
     private ComputeBuffer spatialOffsets;
+    public ComputeBuffer _particlesBuffer;
+    public Particle[] particles;
 
     // Kernels
     private readonly int externalForcesKernel = 0;
@@ -46,7 +48,7 @@ public class Simulation3D : MonoBehaviour
     private readonly int updatePositionsKernel = 5;
 
     private GPUSort gpuSort;
-    private Spawner.SpawnData spawnData;
+    public Spawner.SpawnData spawnData;
 
     // Status
     private bool isPaused;
@@ -128,6 +130,18 @@ public class Simulation3D : MonoBehaviour
         densityBuffer = ComputeHelper.CreateStructuredBuffer<float2>(particleQuantity);
         spatialIndexes = ComputeHelper.CreateStructuredBuffer<uint3>(particleQuantity);
         spatialOffsets = ComputeHelper.CreateStructuredBuffer<uint>(particleQuantity);
+    
+        _particlesBuffer = new ComputeBuffer(particleQuantity, 44);
+        _particlesBuffer.SetData(particles);
+        /*
+            Vale Ojito a como te has quedado con respecto al Raymarching del pavo ese
+            ahora tenemos que encontrar la manera de meter el particles, de alguna forma
+            por lo que estoy viendo tengo que modificar o crear una nueva funcion
+            para hacer aparecer las particulas en la caja y asi poder meter
+            el particles en el _particlesBuffer. Después de eso tengo que seguir investigando
+            el como meter _particlesBuffer. :D Venga Jaime que sé que tu puedes campeón
+            Esto cuesta, pero repetir cuesta el doble y yo confío en ti <3
+        */
     }
 
     private void ConfigureComputeShader() {
