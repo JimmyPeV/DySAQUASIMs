@@ -42,7 +42,7 @@ public class RayMarchingFluid : MonoBehaviour
     public void Begin()
     {
         InitRenderTexture();
-        //rayMarching.SetBuffer(0,"particles",simulation._particlesBuffer);
+        rayMarching.SetBuffer(0,"particles",simulation._particlesBuffer);
         rayMarching.SetInt("numParticles", simulation.spawnData.points.Length);
         rayMarching.SetFloat("particleRadius", viewRadius);
         rayMarching.SetFloat("blendStrength", blendStrength);

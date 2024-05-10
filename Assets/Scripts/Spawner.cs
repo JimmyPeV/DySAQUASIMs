@@ -18,6 +18,7 @@ public class Spawner : MonoBehaviour
         int numPoints = particleQuantityPerAxis * particleQuantityPerAxis * particleQuantityPerAxis;
         float3[] points = new float3[numPoints];
         float3[] velocities = new float3[numPoints];
+        Particle[] particles = new Particle[numPoints];
 
         int i = 0;
 
@@ -37,19 +38,29 @@ public class Spawner : MonoBehaviour
                     float3 jitter = UnityEngine.Random.insideUnitSphere * jitterStrength;
                     points[i] = new float3(px, py, pz) + jitter;
                     velocities[i] = initialVel;
+
+                    particles[i] = new Particle
+                    {
+                        position = new float3(px, py, pz) + jitter,
+                        velocity = initialVel,
+                        currentForce = Vector3.zero, // Inicializa según sea necesario
+                        density = 0, // Inicializa según sea necesario
+                        pressure = 0 // Inicializa según sea necesario
+                    };
                     
                     i++;
                 }
             }
         }
         //Debug.Log(velocities[0]);
-        return new SpawnData() { points = points, velocities = velocities };
+        return new SpawnData() { points = points, velocities = velocities, particles = particles };
     }
 
     public struct SpawnData
     {
         public float3[] points;
         public float3[] velocities;
+        public Particle[] particles;
     }
 
     void OnValidate()

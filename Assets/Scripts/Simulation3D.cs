@@ -3,6 +3,14 @@ using Unity.Mathematics;
 using UnityEditor;
 using System;
 
+public struct Particle {
+    public float pressure;
+    public float density;
+    public Vector3 currentForce;
+    public Vector3 velocity;
+    public Vector3 position;
+}
+
 public class Simulation3D : MonoBehaviour
 {
     #region Variables
@@ -16,6 +24,7 @@ public class Simulation3D : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private ComputeShader computeShader;
+    public ComputeShader sphCompute;
     [SerializeField] private Spawner spawner;
     [SerializeField] private Display display;
     public Transform floorDisplay;
@@ -36,8 +45,14 @@ public class Simulation3D : MonoBehaviour
     public ComputeBuffer predictedPositionsBuffer;
     private ComputeBuffer spatialIndexes;
     private ComputeBuffer spatialOffsets;
+
+    //Raymarching settings
     public ComputeBuffer _particlesBuffer;
+    //public ComputeBuffer _argsBuffer;
     public Particle[] particles;
+    private int integrateKernel;
+    private int computeForceKernel;
+    private int densityPressureKernel;
 
     // Kernels
     private readonly int externalForcesKernel = 0;
@@ -60,6 +75,7 @@ public class Simulation3D : MonoBehaviour
 
     private void Start() {
         Debug.Log("Controls: Space = Play/Pause, R = Reset");
+        //particles = spawner.GenerateParticles();
         InitializeComputeBuffers();
     }
 
@@ -105,7 +121,13 @@ public class Simulation3D : MonoBehaviour
     void InitializeComputeBuffers() {
         SetFixedTimeStep();
         RetrieveSpawnData();
+        particles = spawnData.particles;
         InitializeBuffers(spawnData.points.Length);
+
+        _particlesBuffer = new ComputeBuffer(spawnData.points.Length, 44);
+        _particlesBuffer.SetData(particles);
+
+        SetupRaymarchingShaderBuffers();
         SetInitialBufferData(spawnData);
         ConfigureComputeShader();
         InitializeGPUSort();
@@ -130,9 +152,6 @@ public class Simulation3D : MonoBehaviour
         densityBuffer = ComputeHelper.CreateStructuredBuffer<float2>(particleQuantity);
         spatialIndexes = ComputeHelper.CreateStructuredBuffer<uint3>(particleQuantity);
         spatialOffsets = ComputeHelper.CreateStructuredBuffer<uint>(particleQuantity);
-    
-        _particlesBuffer = new ComputeBuffer(particleQuantity, 44);
-        _particlesBuffer.SetData(particles);
         /*
             Vale Ojito a como te has quedado con respecto al Raymarching del pavo ese
             ahora tenemos que encontrar la manera de meter el particles, de alguna forma
@@ -195,6 +214,11 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.Dispatch(computeShader, positionBuffer.count, kernelIndex: pressureKernel);
         ComputeHelper.Dispatch(computeShader, positionBuffer.count, kernelIndex: viscosityKernel);
         ComputeHelper.Dispatch(computeShader, positionBuffer.count, kernelIndex: updatePositionsKernel);
+
+        // Total Particles has to be divisible by 100 
+        sphCompute.Dispatch(densityPressureKernel, spawnData.points.Length / 100, 1, 1); // 1. Compute Density/Pressure for each particle
+        sphCompute.Dispatch(computeForceKernel, spawnData.points.Length / 100, 1, 1); // 2. Use Density/Pressure to calculate forces
+        sphCompute.Dispatch(integrateKernel, spawnData.points.Length / 100, 1, 1); // 3. Use forces to move particles
     }
 
     #endregion
@@ -214,6 +238,11 @@ public class Simulation3D : MonoBehaviour
         SetShaderParameters(deltaTime);
         computeShader.SetMatrix("localToWorld", transform.localToWorldMatrix);
         computeShader.SetMatrix("worldToLocal", transform.worldToLocalMatrix);
+
+        sphCompute.SetVector("boxSize", transform.localScale);
+        sphCompute.SetFloat("timestep", deltaTime);
+        sphCompute.SetVector("spherePos", collisionObject.transform.position);
+        sphCompute.SetFloat("sphereRadius", collisionObject.transform.localScale.x/2);
     }
 
     private void SetShaderParameters(float deltaTime)
@@ -233,6 +262,32 @@ public class Simulation3D : MonoBehaviour
         computeShader.SetVector("centre", simBoundsCentre);
         computeShader.SetVector("objectPosition", collisionObject.transform.position);
         computeShader.SetVector("objectSize", collisionObject.transform.localScale);
+    }
+
+    private void SetupRaymarchingShaderBuffers()
+    {
+        integrateKernel = sphCompute.FindKernel("Integrate");
+        computeForceKernel = sphCompute.FindKernel("ComputeForces");
+        densityPressureKernel = sphCompute.FindKernel("ComputeDensityPressure");
+
+        sphCompute.SetInt("particleLength", spawnData.points.Length);
+        sphCompute.SetFloat("particleMass", 1.0f);
+        sphCompute.SetFloat("viscosity", viscosityStrength);
+        sphCompute.SetFloat("gasConstant", 2.0f);
+        sphCompute.SetFloat("restDensity", 1.0f);
+        sphCompute.SetFloat("boundDamping", collisionDamping);
+        sphCompute.SetFloat("pi", Mathf.PI);
+        sphCompute.SetVector("boxSize", transform.localScale);
+
+        sphCompute.SetFloat("radius", smoothingRadius);
+        sphCompute.SetFloat("radius2", smoothingRadius * smoothingRadius);
+        sphCompute.SetFloat("radius3", smoothingRadius * smoothingRadius * smoothingRadius);
+        sphCompute.SetFloat("radius4", smoothingRadius * smoothingRadius * smoothingRadius * smoothingRadius);
+        sphCompute.SetFloat("radius5", smoothingRadius * smoothingRadius * smoothingRadius * smoothingRadius * smoothingRadius);
+
+        sphCompute.SetBuffer(integrateKernel, "_particles", _particlesBuffer);
+        sphCompute.SetBuffer(computeForceKernel, "_particles", _particlesBuffer);
+        sphCompute.SetBuffer(densityPressureKernel, "_particles", _particlesBuffer);
     }
 
     void HandleInput()
