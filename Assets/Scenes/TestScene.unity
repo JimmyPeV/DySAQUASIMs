@@ -366,7 +366,7 @@ Transform:
   m_GameObject: {fileID: 572826632}
   serializedVersion: 2
   m_LocalRotation: {x: 0.40821788, y: -0.23456968, z: 0.10938163, w: 0.8754261}
-  m_LocalPosition: {x: 0, y: 3, z: 0}
+  m_LocalPosition: {x: 0, y: 10.76, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -498,6 +498,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5aee3992a90360b4699abdca3c0c2109, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  target: {fileID: 0}
   speed: 0
 --- !u!114 &735265480 stripped
 MonoBehaviour:
@@ -682,12 +683,12 @@ PrefabInstance:
     - target: {fileID: 335086675212919118, guid: d8291d8eec3a8374696083e841e85733,
         type: 3}
       propertyPath: debug_numParticles
-      value: 91125
+      value: 1000
       objectReference: {fileID: 0}
     - target: {fileID: 335086675212919118, guid: d8291d8eec3a8374696083e841e85733,
         type: 3}
       propertyPath: particleQuantityPerAxis
-      value: 45
+      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 3086950791977249639, guid: d8291d8eec3a8374696083e841e85733,
         type: 3}
@@ -746,6 +747,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6219516248412295597, guid: d8291d8eec3a8374696083e841e85733,
         type: 3}
+      propertyPath: sphCompute
+      value: 
+      objectReference: {fileID: 7200000, guid: 20e12f240a49d5f4e9dc47333550de8c, type: 3}
+    - target: {fileID: 6219516248412295597, guid: d8291d8eec3a8374696083e841e85733,
+        type: 3}
       propertyPath: FloorDisplay
       value: 
       objectReference: {fileID: 628113280}
@@ -777,7 +783,7 @@ PrefabInstance:
     - target: {fileID: 7196938706310779985, guid: d8291d8eec3a8374696083e841e85733,
         type: 3}
       propertyPath: m_Enabled
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7196938706310779985, guid: d8291d8eec3a8374696083e841e85733,
         type: 3}
@@ -1083,8 +1089,8 @@ Camera:
   m_GameObject: {fileID: 1423962128}
   m_Enabled: 1
   serializedVersion: 2
-  m_ClearFlags: 1
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_ClearFlags: 2
+  m_BackGroundColor: {r: 0, g: 0, b: 0, a: 0}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -1134,7 +1140,7 @@ Transform:
   m_GameObject: {fileID: 1423962128}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: -10}
+  m_LocalPosition: {x: 0, y: 1, z: -12.97}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1155,9 +1161,9 @@ MonoBehaviour:
   rayMarching: {fileID: 7200000, guid: f922c03aaca19544f8766a6e78aebd76, type: 3}
   camera: {fileID: 1423962130}
   simulation: {fileID: 735265480}
-  viewRadius: 0
-  blendStrength: 0
-  liquidColor: {r: 0, g: 0.7880776, b: 1, a: 0.8156863}
+  viewRadius: 1
+  blendStrength: 1
+  liquidColor: {r: 0, g: 0.25490198, b: 1, a: 1}
   ambientLight: {r: 0.61614454, g: 0.8113208, b: 0.8047842, a: 0.6313726}
   lightSource: {fileID: 572826633}
 --- !u!1 &1527832481

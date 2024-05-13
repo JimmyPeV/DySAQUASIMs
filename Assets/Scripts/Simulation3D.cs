@@ -50,9 +50,7 @@ public class Simulation3D : MonoBehaviour
     public ComputeBuffer _particlesBuffer;
     //public ComputeBuffer _argsBuffer;
     public Particle[] particles;
-    private int integrateKernel;
-    private int computeForceKernel;
-    private int densityPressureKernel;
+    private int synchronizeKernel;
 
     // Kernels
     private readonly int externalForcesKernel = 0;
@@ -215,10 +213,7 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.Dispatch(computeShader, positionBuffer.count, kernelIndex: viscosityKernel);
         ComputeHelper.Dispatch(computeShader, positionBuffer.count, kernelIndex: updatePositionsKernel);
 
-        // Total Particles has to be divisible by 100 
-        sphCompute.Dispatch(densityPressureKernel, spawnData.points.Length / 100, 1, 1); // 1. Compute Density/Pressure for each particle
-        sphCompute.Dispatch(computeForceKernel, spawnData.points.Length / 100, 1, 1); // 2. Use Density/Pressure to calculate forces
-        sphCompute.Dispatch(integrateKernel, spawnData.points.Length / 100, 1, 1); // 3. Use forces to move particles
+        ComputeHelper.Dispatch(computeShader, positionBuffer.count, kernelIndex: synchronizeKernel);
     }
 
     #endregion
@@ -266,9 +261,7 @@ public class Simulation3D : MonoBehaviour
 
     private void SetupRaymarchingShaderBuffers()
     {
-        integrateKernel = sphCompute.FindKernel("Integrate");
-        computeForceKernel = sphCompute.FindKernel("ComputeForces");
-        densityPressureKernel = sphCompute.FindKernel("ComputeDensityPressure");
+        synchronizeKernel = computeShader.FindKernel("SynchronizeParticles");
 
         sphCompute.SetInt("particleLength", spawnData.points.Length);
         sphCompute.SetFloat("particleMass", 1.0f);
@@ -284,10 +277,10 @@ public class Simulation3D : MonoBehaviour
         sphCompute.SetFloat("radius3", smoothingRadius * smoothingRadius * smoothingRadius);
         sphCompute.SetFloat("radius4", smoothingRadius * smoothingRadius * smoothingRadius * smoothingRadius);
         sphCompute.SetFloat("radius5", smoothingRadius * smoothingRadius * smoothingRadius * smoothingRadius * smoothingRadius);
-
-        sphCompute.SetBuffer(integrateKernel, "_particles", _particlesBuffer);
-        sphCompute.SetBuffer(computeForceKernel, "_particles", _particlesBuffer);
-        sphCompute.SetBuffer(densityPressureKernel, "_particles", _particlesBuffer);
+        
+        sphCompute.SetBuffer(synchronizeKernel, "_particles", _particlesBuffer);
+        /*sphCompute.SetBuffer(computeForceKernel, "_particles", _particlesBuffer);
+        sphCompute.SetBuffer(densityPressureKernel, "_particles", _particlesBuffer);*/
     }
 
     void HandleInput()

@@ -5,11 +5,23 @@
 #pragma kernel CalculateViscosity
 #pragma kernel UpdatePositions
 
+#pragma kernel SynchronizeParticles //Synx
+//#pragma kernel ComputeForces // Compute forces for each particle
+//#pragma kernel ComputeDensityPressure // Compute density/pressure for each particle
+
 // Includes
 #include "./FluidMaths3D.hlsl"
 #include "./SpatialHash3D.hlsl"
 
-static const int NumThreads = 64;
+struct Particle {
+    float pressure;
+    float density;
+    float3 currentForce;
+    float3 velocity;
+    float3 position;
+};
+
+static const int NumThreads = 64; //we need more
 
 // Buffers
 RWStructuredBuffer<float3> Positions;
@@ -18,6 +30,8 @@ RWStructuredBuffer<float3> Velocities;
 RWStructuredBuffer<float2> Densities; // Density, Near Density
 RWStructuredBuffer<uint3> SpatialIndices; // used for spatial hashing
 RWStructuredBuffer<uint> SpatialOffsets; // used for spatial hashing
+
+RWStructuredBuffer<Particle> _particles;
 
 // Settings
 const uint numParticles;
@@ -35,6 +49,25 @@ const float3 boundsSize;
 const float3 centre;
 float3 objectPosition;
 float3 objectSize;
+
+
+//Extra sph components
+float particleMass;
+//float viscosity;
+float gasConstant;
+float restDensity;
+//float boundDamping;
+float radius;
+float radius2;
+float radius3;
+float radius4;
+float radius5;
+float pi;
+int particleLength;
+//float timestep;
+//float3 boxSize;
+//float3 spherePos;
+//float sphereRadius;
 
 const float4x4 localToWorld;
 const float4x4 worldToLocal;
@@ -83,7 +116,7 @@ void ResolveCollisions(uint particleIndex)
 	// Transform resolved position/velocity back to world space
 	Positions[particleIndex] = mul(localToWorld, float4(posLocal, 1)).xyz;
 	Velocities[particleIndex] = mul(localToWorld, float4(velocityLocal, 0)).xyz;
-
+	//_particles[particleIndex].position = Positions[particleIndex];
 }
 
 [numthreads(NumThreads,1,1)]
@@ -293,4 +326,13 @@ void UpdatePositions(uint3 id : SV_DispatchThreadID)
 
 	Positions[id.x] += Velocities[id.x] * deltaTime;
 	ResolveCollisions(id.x);
+}
+
+[numthreads(NumThreads,1,1)]
+void SynchronizeParticles(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= numParticles) return;
+
+    _particles[id.x].position = Positions[id.x];
+    _particles[id.x].velocity = Velocities[id.x];
 }
