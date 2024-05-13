@@ -49,7 +49,7 @@ public class Simulation3D : MonoBehaviour
     private Spawner.SpawnData spawnData;
 
     // Status
-    private bool isPaused;
+    public bool isPaused;
     private bool pauseNextFrame;
 
     #endregion
@@ -236,9 +236,13 @@ public class Simulation3D : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.R))
         {
-            isPaused = true;
-            SetInitialBufferData(spawnData);
+            ResetSimulation();
         }
+    }
+
+    public void ResetSimulation(){
+        isPaused = true;
+        SetInitialBufferData(spawnData);
     }
 
     void OnDestroy()
