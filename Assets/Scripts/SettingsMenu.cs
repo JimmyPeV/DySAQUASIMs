@@ -9,6 +9,7 @@ public class SettingsMenu : MonoBehaviour
     public Spawner spawner3D;
     public Display display3D;
     public UIManager uiManager;
+    public CameraRotator camera;
 
     #endregion
 
@@ -101,6 +102,14 @@ public class SettingsMenu : MonoBehaviour
     public void SetParticleSize(float scale){
         display3D.meshScale = scale;
         uiManager.ShowMessage("Particle Mesh Size Set to: " + scale);
+    }
+
+    public void SetCameraDistance(float distanceCam){
+        camera.distance = distanceCam;
+    }
+
+    public void SetCameraSpeed(float rotateCam){
+        camera.speed = rotateCam;
     }
     /*public void SetParticleColorGradient(){
 
