@@ -24,6 +24,7 @@ const uint numParticles;
 const float gravity;
 const float deltaTime;
 const float collisionDamping;
+const float particleMass = 1;
 const float smoothingRadius;
 const float targetDensity;
 const float pressureMultiplier;
@@ -67,17 +68,17 @@ void ResolveCollisions(uint particleIndex)
 	if (edgeDst.x <= 0)
 	{
 		posLocal.x = halfSize.x * sign(posLocal.x);
-		velocityLocal.x *= -1 * collisionDamping;
+		velocityLocal.x *= -particleMass * collisionDamping;
 	}
 	if (edgeDst.y <= 0)
 	{
 		posLocal.y = halfSize.y * sign(posLocal.y);
-		velocityLocal.y *= -1 * collisionDamping;
+		velocityLocal.y *= -particleMass * collisionDamping;
 	}
 	if (edgeDst.z <= 0)
 	{
 		posLocal.z = halfSize.z * sign(posLocal.z);
-		velocityLocal.z *= -1 * collisionDamping;
+		velocityLocal.z *= -particleMass * collisionDamping;
 	}
 
 	// Transform resolved position/velocity back to world space

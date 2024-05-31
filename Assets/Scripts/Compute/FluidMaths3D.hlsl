@@ -1,7 +1,5 @@
 static const float PI = 3.1415926;
 
-
-// 3d conversion: done
 float SmoothingKernelPoly6(float dst, float radius)
 {
 	if (dst < radius)
@@ -13,7 +11,6 @@ float SmoothingKernelPoly6(float dst, float radius)
 	return 0;
 }
 
-// 3d conversion: done
 float SpikyKernelPow3(float dst, float radius)
 {
 	if (dst < radius)
@@ -25,8 +22,6 @@ float SpikyKernelPow3(float dst, float radius)
 	return 0;
 }
 
-// 3d conversion: done
-//Integrate[(h-r)^2 r^2 Sin[θ], {r, 0, h}, {θ, 0, π}, {φ, 0, 2*π}]
 float SpikyKernelPow2(float dst, float radius)
 {
 	if (dst < radius)
@@ -38,7 +33,6 @@ float SpikyKernelPow2(float dst, float radius)
 	return 0;
 }
 
-// 3d conversion: done
 float DerivativeSpikyPow3(float dst, float radius)
 {
 	if (dst <= radius)
@@ -50,7 +44,6 @@ float DerivativeSpikyPow3(float dst, float radius)
 	return 0;
 }
 
-// 3d conversion: done
 float DerivativeSpikyPow2(float dst, float radius)
 {
 	if (dst <= radius)
@@ -64,8 +57,8 @@ float DerivativeSpikyPow2(float dst, float radius)
 
 float DensityKernel(float dst, float radius)
 {
-	//return SmoothingKernelPoly6(dst, radius);
 	return SpikyKernelPow2(dst, radius);
+	//return SmoothingKernelPoly6(dst, radius);
 }
 
 float NearDensityKernel(float dst, float radius)

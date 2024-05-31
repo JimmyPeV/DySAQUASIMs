@@ -242,7 +242,7 @@ public class Simulation3D : MonoBehaviour
 
     public void ResetSimulation(){
         isPaused = true;
-        SetInitialBufferData(spawnData);
+        InitializeComputeBuffers(); //known bug where the colors of the display dissapear
     }
 
     void OnDestroy()
